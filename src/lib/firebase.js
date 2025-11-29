@@ -1,18 +1,22 @@
+// src/lib/firebase.js
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Sử dụng biến môi trường (Sẽ cấu hình trên Vercel sau)
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
-};
+// --- KHỞI TẠO FIREBASE ---
+// Cấu hình Firebase và App ID được tải từ file .env
+// Đảm bảo rằng file .env của bạn có VITE_FIREBASE_CONFIG
+const firebaseConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
+if (!firebaseConfigString || firebaseConfigString === 'PASTE_YOUR_FIREBASE_CONFIG_OBJECT_HERE') {
+    console.error("Firebase config is not set in .env file. Please set VITE_FIREBASE_CONFIG.");
+    // Có thể throw error hoặc hiển thị thông báo lỗi trên UI
+}
 
+const firebaseConfig = JSON.parse(firebaseConfigString);
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
-export const auth = getAuth(app);
-export const APP_ID = 'math-app-grade3'; // ID định danh cho ứng dụng
+const db = getFirestore(app);
+const auth = getAuth(app);
+const appId = import.meta.env.VITE_APP_ID || 'math-app-grade3';
+
+// Export các đối tượng đã được khởi tạo để các file khác có thể sử dụng
+export { db, auth, appId };

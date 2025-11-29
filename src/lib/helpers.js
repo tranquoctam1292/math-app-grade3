@@ -1,4 +1,4 @@
-// src/utils/helpers.js
+// src/lib/helpers.js
 import React from 'react';
 
 // --- UI COMPONENTS ---
@@ -51,11 +51,11 @@ export const solveSimpleExpression = (expression) => {
   const sanitized = expression
     .replace(/×/g, '*')
     .replace(/:/g, '/')
-    .replace(/[^0-9+\-*/ .]/g, '') 
+    .replace(/[^0-9\+\-\*\/ \.]/g, '') 
     .trim();
 
   // Biểu thức phải ở dạng "số toán tử số"
-  const match = sanitized.match(/^(\d+)\s*([+\-*/])\s*(\d+)$/);
+  const match = sanitized.match(/^(\d+)\s*([\+\-\*\/])\s*(\d+)$/);
   
   if (!match) return null;
 
@@ -68,15 +68,14 @@ export const solveSimpleExpression = (expression) => {
       case '+': return a + b;
       case '-': return a - b;
       case '*': return a * b;
-      case '/': {
+      case '/': 
         // Tránh lỗi chia cho 0 và đảm bảo là số nguyên nếu có thể
         if (b === 0) return null;
         const result = a / b;
         return Number.isInteger(result) ? result : parseFloat(result.toFixed(2));
-      }
       default: return null;
     }
-  } catch {
+  } catch (e) {
     return null; // An toàn là trên hết
   }
 };
