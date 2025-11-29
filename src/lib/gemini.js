@@ -1,6 +1,6 @@
 // --- API CALL WITH RETRY & SAFETY ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY; // Thiết lập rỗng để hệ thống tự động cung cấp khóa API trong Canvas Environment
-const MODEL_NAME = "gemini-2.5-flash-preview-09-2025"; 
+const apiKey = "";
+const MODEL_NAME = "gemini-2.0-flash";
 
 export const callGemini = async (prompt) => {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
