@@ -1,8 +1,9 @@
 // --- API CALL WITH RETRY & SAFETY ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY; 
+const apiKey = ""; // Thiết lập rỗng để hệ thống tự động cung cấp khóa API trong Canvas Environment
+const MODEL_NAME = "gemini-2.5-flash-preview-09-2025"; 
 
 export const callGemini = async (prompt) => {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
   
   const safetySettings = [
       { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -15,7 +16,7 @@ export const callGemini = async (prompt) => {
       contents: [{ parts: [{ text: prompt }] }], 
       generationConfig: { 
         responseMimeType: "application/json", 
-        temperature: 0.2, // Tăng nhẹ nhiệt độ để đa dạng hơn
+        temperature: 0.2, 
         responseSchema: {
           type: "ARRAY",
           items: {
@@ -37,7 +38,7 @@ export const callGemini = async (prompt) => {
 
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  for (let i = 0; i < 3; i++) { // Giảm số lần thử lại để nhanh hơn
+  for (let i = 0; i < 3; i++) { 
       try {
         const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!response.ok) throw new Error(`Lỗi HTTP! Trạng thái: ${response.status}`);
@@ -55,7 +56,10 @@ export const callGemini = async (prompt) => {
         // Cố gắng làm sạch và parse JSON
         const jsonMatch = text.match(/\[.*\]/s);
         if (!jsonMatch) {
-            throw new Error("Không tìm thấy chuỗi JSON hợp lệ trong phản hồi.");
+            // Thử parse toàn bộ nếu không tìm thấy mảng rõ ràng
+            try { return JSON.parse(text); } catch (parseError) {
+                throw new Error("Không tìm thấy chuỗi JSON hợp lệ. " + parseError.message);
+            }
         }
         
         return JSON.parse(jsonMatch[0]); 

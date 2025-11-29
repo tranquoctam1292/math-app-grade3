@@ -1,71 +1,56 @@
 // src/lib/utils.js
 
 // --- DEVICE & SESSION ---
-
-// Lấy hoặc tạo một ID duy nhất cho thiết bị
 export const getDeviceId = () => {
-    let deviceId = localStorage.getItem('deviceId');
+    let deviceId = localStorage.getItem('math_app_device_id');
     if (!deviceId) {
         deviceId = crypto.randomUUID();
-        localStorage.setItem('deviceId', deviceId);
+        localStorage.setItem('math_app_device_id', deviceId);
     }
     return deviceId;
 };
 
 // --- FORMATTING ---
-
-// Định dạng số thành dạng tiền tệ (không có phần thập phân)
-export const fmt = (value) => {
-    return new Intl.NumberFormat('vi-VN').format(value || 0);
+export const fmt = (num) => {
+    if (num === null || num === undefined) return "0";
+    if (/[a-zA-Z]/.test(String(num))) return String(num); 
+    return new Intl.NumberFormat('vi-VN').format(parseInt(num));
 };
 
-// --- LOGIC & CALCULATION ---
 
-/**
- * Giải một biểu thức toán học đơn giản một cách an toàn.
- * Hỗ trợ các phép tính: +, -, *, x, :, /
- * Ví dụ: "10 + 5", "3 x 4", "12 : 2"
- * Trả về null nếu biểu thức không hợp lệ hoặc phức tạp.
- */
+// --- LOGIC & CALCULATION ---
 export const solveSimpleExpression = (expression) => {
   if (typeof expression !== 'string') return null;
 
+  // Chuẩn hóa ký hiệu phép nhân và chia
   const sanitized = expression
+    .toLowerCase()
+    .replace(/x/g, '*')
     .replace(/×/g, '*')
     .replace(/:/g, '/')
-    .replace(/[^0-9+\-*/ .]/g, '') 
+    .replace(/[^0-9+\-*/().]/g, ' ') 
+    .replace(/(\s{2,})/g, ' ') 
     .trim();
 
-  const match = sanitized.match(/^(\d+)\s*([+\-*/])\s*(\d+)$/);
-  
-  if (!match) return null;
-
-  const [, num1, operator, num2] = match;
-  const a = parseInt(num1, 10);
-  const b = parseInt(num2, 10);
+  // Kiểm tra xem có phép toán nào không và không phải là tìm X
+  if (!/[+\-*/]/.test(sanitized) || sanitized.includes('x')) return null;
 
   try {
-    switch (operator) {
-      case '+': return a + b;
-      case '-': return a - b;
-      case '*': return a * b;
-      case '/': {
-        if (b === 0) return null;
-        const result = a / b;
-        return Number.isInteger(result) ? result : parseFloat(result.toFixed(2));
-      }
-      default: return null;
-    }
+    // Đánh giá biểu thức
+    const result = new Function('return ' + sanitized)();
+    if (isNaN(result) || !isFinite(result)) return null;
+
+    // Chỉ trả về số nguyên (Toán lớp 3)
+    return Number.isInteger(result) ? result : null; 
   } catch {
-    return null; // An toàn là trên hết
+    return null; 
   }
 };
 
 
 // --- DATA ENCODING ---
-
-// Mã hóa email để dùng làm key trong Firebase (thay thế các ký tự không hợp lệ)
 export const encodeEmail = (email) => {
     if (!email) return '';
-    return email.replace(/\./g, ',').replace(/@/g, '_at_');
+    // Mã hóa base64 để tránh các ký tự đặc biệt trong Firestore key
+    return btoa(email.toLowerCase().trim()).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 };

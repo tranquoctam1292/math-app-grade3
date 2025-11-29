@@ -1,7 +1,7 @@
 import React from 'react';
 import { PiggyBank, Sparkles, WifiOff, Play, Loader, BarChart3, ShoppingBag, Settings } from 'lucide-react';
 import { ClayButton } from '../lib/helpers.jsx';
-import { fmt } from '../lib/utils.js';
+import { fmt } from '../utils/helpers.jsx';
 
 
 const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, handleStartQuiz, config, setCurrentProfile, appError, setAppError }) => (

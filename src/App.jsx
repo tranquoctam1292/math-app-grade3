@@ -17,9 +17,10 @@ import {
 } from 'firebase/firestore';
 
 // Import modules
-import { ClayButton, getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './lib/helpers';
-import { callGemini } from './lib/gemini';
-import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants';
+import { ClayButton } from './lib/helpers.jsx';
+import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './utils/helpers.jsx';
+import { callGemini } from './lib/gemini.js';
+import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './utils/constants.js';
 import { db, auth, appId } from './lib/firebase';
 
 // Import components
@@ -51,7 +52,6 @@ const MathApp = () => {
   const [newProfileAvatar, setNewProfileAvatar] = useState(AVATARS[0]);
 
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); 
   
   const [piggyBank, setPiggyBank] = useState(0);
   const [redemptionHistory, setRedemptionHistory] = useState([]);
@@ -132,6 +132,14 @@ const MathApp = () => {
 
   // --- XÁC THỰC HỆ THỐNG & KHỞI TẠO ---
   useEffect(() => {
+    // Thêm kiểm tra an toàn: chỉ chạy nếu auth được khởi tạo thành công
+    if (!auth) {
+      setAppError("Lỗi cấu hình Firebase! Vui lòng kiểm tra file .env hoặc biến môi trường.");
+      setIsLoading(false);
+      setIsAuthReady(true);
+      return;
+    }
+
     // Chỉ chạy lần đầu tiên khi app load
     if (isLoading && !isAuthReady) {
         const initSystemAuth = async () => {
@@ -173,7 +181,7 @@ const MathApp = () => {
     });
 
     return () => unsubscribe();
-  }, [isAuthReady, isLoading]); // SỬA LỖI: Thêm isLoading vào dependency array
+  }, [isAuthReady, isLoading]);
 
   // --- TẢI HỒ SƠ & DỮ LIỆU BAN ĐẦU ---
   useEffect(() => {
@@ -257,7 +265,6 @@ const MathApp = () => {
 
   const saveData = async (newData) => {
     if (!appUser || !currentProfile) return;
-    setIsSaving(true);
     try {
         const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
         await updateDoc(userDocRef, newData);
@@ -265,7 +272,6 @@ const MathApp = () => {
         console.error("Lỗi lưu dữ liệu:", e);
         setAppError("Lỗi lưu dữ liệu lên Cloud. Vui lòng kiểm tra kết nối.");
     }
-    setTimeout(() => setIsSaving(false), 1000);
   };
 
   const saveConfig = async (newConfig) => {
@@ -398,7 +404,7 @@ const MathApp = () => {
 
   const handleNextQuestion = () => {
       if (currentQIndex < quizData.length - 1) { setCurrentQIndex(prev => prev + 1); setSelectedOption(null); setIsSubmitted(false); setQuestionStartTime(Date.now()); }  
-      else { finishGame(); }
+      else { finishGame(); } 
   };
 
   const finishGame = async () => {
@@ -480,26 +486,26 @@ const MathApp = () => {
   const getScreenComponent = () => {
       switch (gameState) {
           case 'auth':
-              return <AuthScreen onLoginSuccess={handleAppLogin} errorMsg={authError} setErrorMsg={setAuthError} />;
+              return <AuthScreen onLoginSuccess={handleAppLogin} errorMsg={authError} setErrorMsg={setAuthError} />; 
           case 'profile_select':
-              return <ProfileScreen profiles={profiles} setCurrentProfile={setCurrentProfile} isCreatingProfile={isCreatingProfile} setIsCreatingProfile={setIsCreatingProfile} newProfileName={newProfileName} setNewProfileName={setNewProfileName} newProfileAvatar={newProfileAvatar} setNewProfileAvatar={setNewProfileAvatar} createProfile={createProfile} appUser={appUser} />;
+              return <ProfileScreen profiles={profiles} setCurrentProfile={setCurrentProfile} isCreatingProfile={isCreatingProfile} setIsCreatingProfile={setIsCreatingProfile} newProfileName={newProfileName} setNewProfileName={setNewProfileName} newProfileAvatar={newProfileAvatar} setNewProfileAvatar={setNewProfileAvatar} createProfile={createProfile} appUser={appUser} />; 
           case 'user_profile':
-              return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleAppLogout} />;
+              return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleAppLogout} />; 
           case 'home':
-              return <HomeScreen piggyBank={piggyBank} isSaving={isSaving} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} isAuthReady={isAuthReady} />;
+              return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} isAuthReady={isAuthReady} />; 
           case 'playing':
               // Cần truyền đủ props cho QuizScreen
-              return <QuizScreen quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} />;
+              return <QuizScreen quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} />; 
           case 'result':
-              return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />;
+              return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
           case 'report':
-              return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} />;
+              return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} />; 
           case 'shop':
-              return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} />;
+              return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} />; 
           case 'config':
-              return <ConfigScreen config={config} setConfig={setConfig} saveConfig={saveConfig} setGameState={setGameState} onLogout={handleAppLogout} appUser={appUser} />;
+              return <ConfigScreen config={config} setConfig={setConfig} saveConfig={saveConfig} setGameState={setGameState} onLogout={handleAppLogout} appUser={appUser} />; 
           default:
-              return <AuthScreen onLoginSuccess={handleAppLogin} errorMsg={authError} setErrorMsg={setAuthError} />;
+              return <AuthScreen onLoginSuccess={handleAppLogin} errorMsg={authError} setErrorMsg={setAuthError} />; 
       }
   };
 
