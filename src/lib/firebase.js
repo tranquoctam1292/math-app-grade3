@@ -5,40 +5,30 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 // --- KHỞI TẠO FIREBASE ---
-// 1. Cố gắng đọc từ biến global (Canvas Environment)
-// Chúng ta đã khai báo global ở dòng 1 để tránh lỗi ESLint
-const globalConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-const globalAppId = typeof __app_id !== 'undefined' ? __app_id : null;
+const firebaseConfig = {
+  apiKey: "AIzaSyCPQ1wy4j-z0yW1N3K2TSUzyJnDhUWe17Y",
+  authDomain: "math-app-v1-6ddcf.firebaseapp.com",
+  projectId: "math-app-v1-6ddcf",
+  storageBucket: "math-app-v1-6ddcf.firebasestorage.app",
+  messagingSenderId: "974155148852",
+  appId: "1:974155148852:web:84a7c92599fd36ed596461",
+  measurementId: "G-XY875PTQTW"
+};
 
-// 2. Cố gắng đọc từ biến môi trường Vite (cho môi trường phát triển)
-const viteConfigString = import.meta.env.VITE_FIREBASE_CONFIG;
-const viteConfig = viteConfigString ? JSON.parse(viteConfigString) : null;
-const viteAppId = import.meta.env.VITE_APP_ID;
-
-// 3. Chọn cấu hình ưu tiên (Global > Vite > Default)
-const firebaseConfig = globalConfig || viteConfig;
-const appId = globalAppId || viteAppId || 'math-app-grade3';
+const appId = firebaseConfig.appId;
 
 // Khởi tạo các biến
 let app, db, auth;
 
-if (!firebaseConfig) {
-    console.error("LỖI CẤU HÌNH: Firebase config không được tìm thấy. Vui lòng kiểm tra file .env của bạn.");
-    // Gán giá trị null để các file khác có thể kiểm tra và xử lý
+try {
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    auth = getAuth(app);
+} catch (error) {
+    console.error("Lỗi khởi tạo Firebase:", error);
     app = null;
     db = null;
     auth = null;
-} else {
-    try {
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-    } catch (error) {
-        console.error("Lỗi khởi tạo Firebase:", error);
-        app = null;
-        db = null;
-        auth = null;
-    }
 }
 
 // Export ở cấp cao nhất (Top-level)

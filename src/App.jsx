@@ -18,9 +18,9 @@ import {
 
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
-import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './utils/helpers.jsx';
+import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
-import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './utils/constants.js';
+import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
 
 // Import components

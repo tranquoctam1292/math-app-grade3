@@ -1,5 +1,5 @@
 // --- API CALL WITH RETRY & SAFETY ---
-const apiKey = ""; // Thiết lập rỗng để hệ thống tự động cung cấp khóa API trong Canvas Environment
+const apiKey = "AIzaSyBbJZe62dvl39maf5oKwRMu3aIREKOTLaY"; // Thiết lập rỗng để hệ thống tự động cung cấp khóa API trong Canvas Environment
 const MODEL_NAME = "gemini-2.5-flash-preview-09-2025"; 
 
 export const callGemini = async (prompt) => {
