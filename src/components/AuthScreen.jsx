@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Key, UserPlus, LogIn, AlertTriangle, Loader, ShieldCheck, UserCheck } from 'lucide-react';
-import { ClayButton, getDeviceId, encodeEmail } from '../lib/helpers';
+import { ClayButton } from '../lib/helpers.jsx';
+import { getDeviceId, encodeEmail } from '../lib/utils.js';
 import { signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth, appId } from '../lib/firebase'; // Import from App.jsx

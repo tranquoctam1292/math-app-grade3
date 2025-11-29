@@ -51,6 +51,7 @@ const MathApp = () => {
   const [newProfileAvatar, setNewProfileAvatar] = useState(AVATARS[0]);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); 
   
   const [piggyBank, setPiggyBank] = useState(0);
   const [redemptionHistory, setRedemptionHistory] = useState([]);
@@ -256,6 +257,7 @@ const MathApp = () => {
 
   const saveData = async (newData) => {
     if (!appUser || !currentProfile) return;
+    setIsSaving(true);
     try {
         const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
         await updateDoc(userDocRef, newData);
@@ -263,6 +265,7 @@ const MathApp = () => {
         console.error("Lỗi lưu dữ liệu:", e);
         setAppError("Lỗi lưu dữ liệu lên Cloud. Vui lòng kiểm tra kết nối.");
     }
+    setTimeout(() => setIsSaving(false), 1000);
   };
 
   const saveConfig = async (newConfig) => {
@@ -379,7 +382,7 @@ const MathApp = () => {
   };
 
   const handleSelectOption = (optLabel) => {
-      if (isSubmitted) return; 
+      if (isSubmitted) return;
       
       const timeTaken = Math.round((Date.now() - questionStartTime) / 1000);
       setSelectedOption(optLabel); 
@@ -395,7 +398,7 @@ const MathApp = () => {
 
   const handleNextQuestion = () => {
       if (currentQIndex < quizData.length - 1) { setCurrentQIndex(prev => prev + 1); setSelectedOption(null); setIsSubmitted(false); setQuestionStartTime(Date.now()); }  
-      else { finishGame(); } 
+      else { finishGame(); }
   };
 
   const finishGame = async () => {
@@ -483,7 +486,7 @@ const MathApp = () => {
           case 'user_profile':
               return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleAppLogout} />;
           case 'home':
-              return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} isAuthReady={isAuthReady} />;
+              return <HomeScreen piggyBank={piggyBank} isSaving={isSaving} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} isAuthReady={isAuthReady} />;
           case 'playing':
               // Cần truyền đủ props cho QuizScreen
               return <QuizScreen quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} />;

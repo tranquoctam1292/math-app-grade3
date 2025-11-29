@@ -1,20 +1,4 @@
-// src/lib/helpers.js
-import React from 'react';
-
-// --- UI COMPONENTS ---
-
-// Một component Button đơn giản với style giống đất sét (claymorphism)
-export const ClayButton = ({ onClick, children, className = '', disabled = false }) => {
-  const baseClasses = "font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed";
-  const colorClasses = "bg-indigo-500 text-white border-b-4 border-indigo-700 hover:bg-indigo-400";
-  
-  return (
-    <button onClick={onClick} className={`${baseClasses} ${colorClasses} ${className}`} disabled={disabled}>
-      {children}
-    </button>
-  );
-};
-
+// src/lib/utils.js
 
 // --- DEVICE & SESSION ---
 
@@ -46,16 +30,13 @@ export const fmt = (value) => {
 export const solveSimpleExpression = (expression) => {
   if (typeof expression !== 'string') return null;
 
-  // Chỉ xử lý các biểu thức đơn giản, không chứa chữ cái (ngoại trừ 'x' cho phép nhân)
-  // và các ký tự không cần thiết.
   const sanitized = expression
     .replace(/×/g, '*')
     .replace(/:/g, '/')
-    .replace(/[^0-9\+\-\*\/ \.]/g, '') 
+    .replace(/[^0-9+\-*/ .]/g, '') 
     .trim();
 
-  // Biểu thức phải ở dạng "số toán tử số"
-  const match = sanitized.match(/^(\d+)\s*([\+\-\*\/])\s*(\d+)$/);
+  const match = sanitized.match(/^(\d+)\s*([+\-*/])\s*(\d+)$/);
   
   if (!match) return null;
 
@@ -68,14 +49,14 @@ export const solveSimpleExpression = (expression) => {
       case '+': return a + b;
       case '-': return a - b;
       case '*': return a * b;
-      case '/': 
-        // Tránh lỗi chia cho 0 và đảm bảo là số nguyên nếu có thể
+      case '/': {
         if (b === 0) return null;
         const result = a / b;
         return Number.isInteger(result) ? result : parseFloat(result.toFixed(2));
+      }
       default: return null;
     }
-  } catch (e) {
+  } catch {
     return null; // An toàn là trên hết
   }
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { SHOP_ITEMS } from '../lib/constants';
-import { fmt } from '../lib/helpers';
+import { fmt } from '../lib/utils.js';
 
 const ShopScreen = ({ piggyBank, setGameState, redeemCash, redemptionHistory }) => {
     return (
