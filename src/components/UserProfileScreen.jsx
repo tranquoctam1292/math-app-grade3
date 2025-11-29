@@ -1,42 +1,106 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { UserCog, XCircle, CheckCircle, AlertTriangle, User, Mail, Save, Key, RefreshCw, Loader, ShieldCheck } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db, appId } from '../lib/firebase';
+import { ClayButton } from '../lib/helpers';
+import { encodeEmail } from '../lib/utils';
 
-const UserProfileScreen = ({ appUser, setGameState, onLogout }) => {
-    if (!appUser) {
-        return (
-            <div className="p-6">
-                <p>Không có thông tin người dùng.</p>
-                <button onClick={() => setGameState('auth')} className="text-blue-500">
-                    Về trang đăng nhập
-                </button>
-            </div>
-        );
-    }
+const UserProfileScreen = ({ appUser, setAppUser, setGameState }) => {
+    const [displayName, setDisplayName] = useState(appUser.displayName || '');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [message, setMessage] = useState(null);
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const handleUpdateProfile = async () => {
+        setLoading(true); setMessage(null); setError(null);
+        try {
+            const accountId = encodeEmail(appUser.email);
+            const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
+            await updateDoc(accountRef, { displayName: displayName });
+            
+            const updatedUser = { ...appUser, displayName };
+            setAppUser(updatedUser);
+            localStorage.setItem('math_app_user_session', JSON.stringify(updatedUser));
+            
+            setMessage("Đã cập nhật tên hiển thị!");
+        } catch (e) {
+            setError("Lỗi cập nhật: " + e.message);
+        }
+        setLoading(false);
+    };
+
+    const handleChangePassword = async () => {
+        if (!newPassword || !confirmPassword) { setError("Vui lòng nhập mật khẩu mới"); return; }
+        if (newPassword !== confirmPassword) { setError("Mật khẩu xác nhận không khớp"); return; }
+        if (newPassword.length < 6) { setError("Mật khẩu phải từ 6 ký tự trở lên"); return; }
+
+        setLoading(true); setMessage(null); setError(null);
+        try {
+            const accountId = encodeEmail(appUser.email);
+            const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
+            await updateDoc(accountRef, { password: newPassword });
+            setMessage("Đổi mật khẩu thành công!");
+            setNewPassword(''); setConfirmPassword('');
+        } catch (e) {
+            setError("Lỗi: " + e.message);
+        }
+        setLoading(false);
+    };
 
     return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-4">Tài khoản phụ huynh</h1>
-
-            <div className="bg-gray-100 p-4 rounded-lg mb-6">
-                <p className="text-sm text-gray-600">Email</p>
-                <p className="font-semibold">{appUser.email}</p>
-                <p className="text-sm text-gray-600 mt-2">Tên hiển thị</p>
-                <p className="font-semibold">{appUser.displayName}</p>
-                 <p className="text-sm text-gray-600 mt-2">Mã người dùng</p>
-                <p className="font-mono text-xs bg-gray-200 p-1 rounded">{appUser.uid}</p>
+        <div className="flex flex-col h-full bg-slate-50 p-6 overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-slate-700 flex items-center gap-2"><UserCog className="text-indigo-500"/> Hồ Sơ Phụ Huynh</h2>
+                <ClayButton onClick={() => setGameState('config')} className="w-10 h-10 flex items-center justify-center !rounded-full !p-0"><XCircle size={24} className="text-slate-400"/></ClayButton>
             </div>
 
-            <button
-                onClick={() => onLogout(false)} // false để chỉ logout khỏi app, không logout firebase
-                className="w-full bg-red-500 text-white p-4 rounded-lg font-bold mb-4"
-            >
-                Đăng xuất khỏi hồ sơ
-            </button>
+            {message && <div className="mb-4 bg-green-50 text-green-700 p-3 rounded-xl border border-green-200 font-bold text-sm flex items-center gap-2"><CheckCircle size={16}/> {message}</div>}
+            {error && <div className="mb-4 bg-red-50 text-red-600 p-3 rounded-xl border border-red-200 font-bold text-sm flex items-center gap-2"><AlertTriangle size={16}/> {error}</div>}
 
-            <button onClick={() => setGameState('home')} className="w-full bg-gray-300 text-black p-2 rounded-lg">
-                Về trang chủ
-            </button>
+            <div className="space-y-6 pb-20">
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2 text-sm uppercase"><User size={16}/> Thông tin tài khoản</h3>
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-xs font-bold text-slate-400 block mb-1">Email đăng nhập</label>
+                            <div className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-100 flex items-center text-slate-500 font-bold text-sm">
+                                <Mail size={16} className="mr-2 opacity-50"/> {appUser.email || "Chưa có email"}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-400 block mb-1">Tên hiển thị</label>
+                            <div className="flex gap-2">
+                                <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} className="flex-1 h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700"/>
+                                <ClayButton onClick={handleUpdateProfile} disabled={loading} colorClass="bg-indigo-100 text-indigo-600" className="w-12 h-12 flex items-center justify-center !rounded-xl">
+                                    {loading ? <Loader size={20} className="animate-spin"/> : <Save size={20}/>}
+                                </ClayButton>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
+                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2 text-sm uppercase"><Key size={16}/> Đổi mật khẩu</h3>
+                    <div className="space-y-3">
+                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mật khẩu mới" className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700"/>
+                        <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Xác nhận mật khẩu mới" className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700"/>
+                        <ClayButton onClick={handleChangePassword} disabled={loading} colorClass="bg-slate-800 text-white" className="w-full h-12 flex items-center justify-center gap-2 font-bold !rounded-xl">
+                            {loading ? <Loader size={20} className="animate-spin"/> : <RefreshCw size={20}/>} Cập nhật mật khẩu
+                        </ClayButton>
+                    </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-medium leading-relaxed flex items-start gap-3">
+                    <ShieldCheck size={24} className="flex-none"/>
+                    <div>
+                        <strong className="block mb-1 text-sm">Bảo mật thiết bị</strong>
+                        Tài khoản này được bảo vệ bởi tính năng giới hạn thiết bị. Hiện tại bạn đang đăng nhập hợp lệ trên thiết bị này.
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
-
 export default UserProfileScreen;

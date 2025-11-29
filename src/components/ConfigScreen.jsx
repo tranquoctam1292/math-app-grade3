@@ -13,7 +13,7 @@ const ConfigScreen = ({ config, setConfig, saveConfig, setGameState, onLogout })
     const toggleTopic = (id) => {
         const current = localConfig.selectedTopics;
         if (current.includes(id)) setLocalConfig({...localConfig, selectedTopics: current.filter(t => t !== id)});
-        else setLocalConfig({...localCode, selectedTopics: [...current, id]});
+        else setLocalConfig({...localConfig, selectedTopics: [...current, id]});
     };
     
     return (
