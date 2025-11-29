@@ -243,7 +243,7 @@ const MathApp = () => {
 
   // --- CHỌN HỒ SƠ VÀ VỀ TRANG CHỦ ---
   useEffect(() => {
-    if (currentProfile && gameState !== 'playing' && gameState !== 'result' && gameState !== 'user_profile' && gameState !== 'report' && gameState !== 'shop') {
+    if (currentProfile && gameState !== 'playing' && gameState !== 'result' && gameState !== 'user_profile' && gameState !== 'report' && gameState !== 'shop' && gameState !== 'config') {
       setGameState('home');
     }
   }, [currentProfile, gameState]);
@@ -275,12 +275,13 @@ const MathApp = () => {
   };
 
   const saveConfig = async (newConfig) => {
-      if (!appUser || !currentProfile) { setAppError("Vui lòng chọn hồ sơ trước."); return; }
+      if (!appUser || !currentProfile) {
+          alert("Vui lòng chọn hồ sơ trước.");
+          return;
+      }
       setConfig(newConfig);
       await saveData({ config: newConfig });
-      // Thay alert bằng thông báo nhỏ
-      setAppError("Đã lưu cấu hình bài tập!");
-      setTimeout(() => setAppError(null), 3000);
+      alert("Đã lưu cấu hình bài tập!");
       setGameState('home');
   };
 

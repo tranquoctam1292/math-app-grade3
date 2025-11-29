@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, XCircle, Trophy, Calendar, ListChecks, CheckCircle, HelpCircle, Save, UserCog, LogOut } from 'lucide-react';
 import { ClayButton } from '../lib/helpers';
 import { TOPICS_LIST, SEMESTER_DEFAULT_TOPICS, ICON_MAP } from '../lib/constants';
 
 const ConfigScreen = ({ config, setConfig, saveConfig, setGameState, onLogout }) => {
     const [localConfig, setLocalConfig] = useState(config);
+
+    useEffect(() => {
+        setLocalConfig(config);
+    }, [config]);
 
     const selectSemester = (sem) => {
         setLocalConfig({ ...localConfig, semester: sem, selectedTopics: SEMESTER_DEFAULT_TOPICS[sem] || [] });
