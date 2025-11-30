@@ -5,6 +5,15 @@ import {
 } from 'lucide-react';
 import { TOPICS_LIST, ICON_MAP, SEMESTER_DEFAULT_TOPICS } from '../lib/constants';
 
+// Re-implement ClayButton locally to support `type` prop and specific styling needs.
+const ClayButton = ({ children, onClick, colorClass = "bg-white", className = "", disabled=false, type = 'button' }) => (
+    <button type={type} onClick={onClick} disabled={disabled} className={`relative overflow-hidden transition-all duration-150 ease-in-out rounded-2xl border-2 ${disabled ? 'opacity-50 grayscale cursor-not-allowed' : 'active:scale-95 active:shadow-none shadow-[0_6px_0_rgba(0,0,0,0.15)] cursor-pointer'} ${colorClass} ${className}`}>
+        {children}
+        <div className="absolute top-0 left-0 w-full h-1/3 bg-gradient-to-b from-white/30 to-transparent pointer-events-none"></div>
+    </button>
+);
+
+
 const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
   const [localConfig, setLocalConfig] = useState(config);
 
@@ -34,12 +43,10 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
   };
   
   const difficultyLevels = {
-    easy: { label: 'Khởi động', sub: 'Làm quen', color: 'green', icon: Trophy },
-    medium: { label: 'Tiêu chuẩn', sub: 'Nâng cao', color: 'blue', icon: Calendar },
-    hard: { label: 'Thần đồng', sub: 'Thử thách', color: 'red', icon: ListChecks },
+    easy: { label: 'Khởi động', sub: 'Làm quen', activeClass: 'bg-green-100 border-green-200 text-green-700' },
+    medium: { label: 'Tiêu chuẩn', sub: 'Nâng cao', activeClass: 'bg-blue-100 border-blue-200 text-blue-700' },
+    hard: { label: 'Thần đồng', sub: 'Thử thách', activeClass: 'bg-red-100 border-red-200 text-red-700' },
   };
-
-  const clayButtonClasses = "relative overflow-hidden transition-all duration-150 ease-in-out rounded-2xl border-2 border-transparent active:scale-95 active:shadow-none shadow-[0_6px_0_rgba(0,0,0,0.15)] cursor-pointer";
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -59,19 +66,19 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
         <div>
           <h2 className="text-lg font-bold text-slate-700 mb-3">Độ khó</h2>
           <div className="grid grid-cols-3 gap-3">
-            {Object.entries(difficultyLevels).map(([key, { label, sub, color }]) => (
+            {Object.entries(difficultyLevels).map(([key, { label, sub, activeClass }]) => (
               <button
                 type="button"
                 key={key}
                 onClick={() => setLocalConfig({ ...localConfig, difficultyMode: key })}
-                className={`text-center p-3 rounded-xl border-2 transition-all duration-200 ${
+                className={`text-center p-3 rounded-xl border-2 transition-all font-semibold ${
                   localConfig.difficultyMode === key
-                    ? `bg-${color}-100 text-${color}-800 border-${color}-400 font-bold shadow-inner`
-                    : 'bg-slate-50 border-slate-200 hover:border-slate-400'
+                    ? activeClass
+                    : 'bg-white border-slate-200 hover:bg-slate-50'
                 }`}
               >
                 <span className="block text-md">{label}</span>
-                <small className="text-xs text-slate-500">{sub}</small>
+                <small className="text-xs font-normal text-slate-500">{sub}</small>
               </button>
             ))}
           </div>
@@ -80,12 +87,12 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
         {/* Semester Section */}
         <div>
           <h2 className="text-lg font-bold text-slate-700 mb-3">Học kỳ</h2>
-          <div className="grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
+          <div className="grid grid-cols-2 gap-1 rounded-full bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => handleSemesterChange('hk1')}
-              className={`py-2 px-4 rounded-full text-center font-semibold transition-all ${
-                localConfig.semester === 'hk1' ? 'bg-white shadow' : 'text-slate-500'
+              className={`py-2 px-4 rounded-full text-center transition-all ${
+                localConfig.semester === 'hk1' ? 'bg-white shadow-sm font-bold' : 'text-slate-500 font-semibold'
               }`}
             >
               Học kỳ 1
@@ -93,8 +100,8 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
             <button
               type="button"
               onClick={() => handleSemesterChange('hk2')}
-              className={`py-2 px-4 rounded-full text-center font-semibold transition-all ${
-                localConfig.semester === 'hk2' ? 'bg-white shadow' : 'text-slate-500'
+              className={`py-2 px-4 rounded-full text-center transition-all ${
+                localConfig.semester === 'hk2' ? 'bg-white shadow-sm font-bold' : 'text-slate-500 font-semibold'
               }`}
             >
               Học kỳ 2
@@ -114,9 +121,9 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
                   type="button"
                   key={topic.id}
                   onClick={() => toggleTopic(topic.id)}
-                  className={`w-full flex items-center p-3 rounded-lg border transition-all ${
+                  className={`w-full flex items-center p-3 rounded-lg border-2 transition-all ${
                     isSelected
-                      ? 'bg-indigo-50 text-indigo-700 font-bold border-transparent shadow-sm'
+                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-bold'
                       : 'bg-white hover:bg-slate-50 border-slate-200'
                   }`}
                 >
@@ -132,31 +139,31 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
 
       {/* Footer */}
       <div className="p-4 border-t border-slate-200 bg-white">
-        <button
-          type="button"
+        <ClayButton
           onClick={() => saveConfig(localConfig)}
-          className={`${clayButtonClasses} bg-indigo-500 text-white w-full py-4 text-lg font-bold`}
+          colorClass="bg-indigo-500 text-white border-transparent"
+          className="w-full py-4 text-lg font-bold"
         >
           <Save className="inline-block mr-2" />
           Lưu Cấu Hình
-        </button>
+        </ClayButton>
         <div className="grid grid-cols-2 gap-3 mt-3">
-            <button
-                type="button"
+            <ClayButton
                 onClick={() => setGameState('user_profile')}
-                className={`${clayButtonClasses} bg-slate-200 text-slate-700 w-full py-2.5 font-semibold text-sm`}
+                colorClass="bg-slate-200 text-slate-700 border-transparent"
+                className="w-full py-2.5 font-semibold text-sm"
             >
                 <UserCog className="inline-block mr-1.5 h-4 w-4" />
                 Tài khoản
-            </button>
-             <button
-                type="button"
+            </ClayButton>
+             <ClayButton
                 onClick={handleLogout}
-                className={`${clayButtonClasses} bg-white text-red-600 border-2 border-red-200 w-full py-2.5 font-semibold text-sm`}
+                colorClass="bg-white text-red-600 border-red-300"
+                className="w-full py-2.5 font-semibold text-sm"
             >
                 <LogOut className="inline-block mr-1.5 h-4 w-4" />
                 Đăng xuất
-            </button>
+            </ClayButton>
         </div>
       </div>
     </div>
