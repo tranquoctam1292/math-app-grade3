@@ -153,23 +153,31 @@ const MathApp = () => {
       return;
     }
 
-    if (isLoading && !isAuthReady) {
-        const initSystemAuth = async () => {
-            try {
-                const initialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken); 
-                } else {
+    // Chỉ chạy init một lần duy nhất
+    const initSystemAuth = async () => {
+        try {
+            const initialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken); 
+            } else {
+                // Chỉ sign-in ẩn danh nếu chưa có user
+                if (!auth.currentUser) {
                     await signInAnonymously(auth);
                 }
-            } catch(e) { 
-                console.error("Lỗi xác thực hệ thống:", e); 
+            }
+        } catch(e) { 
+            console.error("Lỗi xác thực hệ thống:", e); 
+            // Fallback
+            if (!auth.currentUser) {
                 await signInAnonymously(auth); 
             }
-        };
-        initSystemAuth();
-    }
+        }
+    };
     
+    // Gọi hàm init
+    initSystemAuth();
+    
+    // Lắng nghe thay đổi auth state
     const unsubscribe = onAuthStateChanged(auth, (u) => {
         setFirebaseUser(u);
         
@@ -192,7 +200,7 @@ const MathApp = () => {
     });
 
     return () => unsubscribe();
-  }, [isAuthReady, isLoading]);
+  }, []); // <--- QUAN TRỌNG: Dependency array rỗng để chỉ chạy 1 lần khi mount
 
   // --- TẢI HỒ SƠ & DỮ LIỆU BAN ĐẦU ---
   useEffect(() => {
@@ -297,7 +305,6 @@ const MathApp = () => {
       setGameState('home');
   };
 
-  // --- LOGIC BẮT ĐẦU QUIZ (QUAN TRỌNG: AI FIRST) ---
   const handleStartQuiz = async () => {
       if (!currentProfile) { showNotification('error', "Vui lòng chọn hồ sơ học tập trước!"); return; }
       if (config.selectedTopics.length === 0) { showNotification('error', "Hãy chọn ít nhất 1 chủ đề!"); return; }
