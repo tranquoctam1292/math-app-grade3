@@ -16,13 +16,57 @@ import {
   doc, setDoc, getDoc, updateDoc
 } from 'firebase/firestore';
 
+// --- DÁN ĐOẠN NÀY VÀO SAU CÁC DÒNG IMPORT ---
+const BACKUP_QUESTIONS = [
+    {
+        "text": "Mẹ đi chợ mua 5 chục quả trứng, biếu bà 20 quả. Hỏi mẹ còn lại bao nhiêu quả trứng?",
+        "options": ["30 quả", "20 quả", "50 quả", "70 quả"],
+        "correctVal": "30 quả",
+        "explanation": "5 chục = 50. Mẹ còn lại: 50 - 20 = 30 (quả).",
+        "level": 2,
+        "topic": "word_problems"
+    },
+    {
+        "text": "Tìm x, biết: x : 5 = 12",
+        "options": ["60", "7", "17", "2.4"],
+        "correctVal": "60",
+        "explanation": "Muốn tìm số bị chia, ta lấy thương nhân với số chia: x = 12 × 5 = 60.",
+        "level": 3,
+        "topic": "finding_x"
+    },
+    {
+        "text": "Tính nhẩm: 234 + 100 - 34",
+        "options": ["300", "334", "200", "368"],
+        "correctVal": "300",
+        "explanation": "Ta lấy 234 - 34 = 200, sau đó 200 + 100 = 300.",
+        "level": 2,
+        "topic": "arithmetic"
+    },
+    {
+        "text": "Một hình vuông có cạnh 6cm. Chu vi hình vuông đó là bao nhiêu?",
+        "options": ["24cm", "36cm", "12cm", "24m"],
+        "correctVal": "24cm",
+        "explanation": "Chu vi hình vuông = cạnh × 4. Vậy chu vi là: 6 × 4 = 24 (cm).",
+        "level": 3,
+        "topic": "geometry"
+    },
+    {
+        "text": "Số liền sau của số 9999 là số nào?",
+        "options": ["10000", "9998", "1000", "9990"],
+        "correctVal": "10000",
+        "explanation": "Muốn tìm số liền sau, ta lấy số đó cộng thêm 1 đơn vị: 9999 + 1 = 10000.",
+        "level": 2,
+        "topic": "numbers_roman"
+    }
+];
+// --- HẾT PHẦN DÁN ---
+
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
 import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
-import { BACKUP_QUESTIONS } from './lib/backupData.js';
 
 // Import components
 import AuthScreen from './components/AuthScreen';
@@ -35,6 +79,7 @@ const ResultScreen = React.lazy(() => import('./components/ResultScreen'));
 const ReportScreen = React.lazy(() => import('./components/ReportScreen'));
 const ConfigScreen = React.lazy(() => import('./components/ConfigScreen'));
 const ShopScreen = React.lazy(() => import('./components/ShopScreen'));
+
 
 
 // --- MAIN APP ---
