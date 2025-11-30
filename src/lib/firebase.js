@@ -1,18 +1,17 @@
-/* global __firebase_config, __app_id */
 // src/lib/firebase.js
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// --- KHỞI TẠO FIREBASE ---
+// --- SỬ DỤNG BIẾN MÔI TRƯỜNG ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCPQ1wy4j-z0yW1N3K2TSUzyJnDhUWe17Y",
-  authDomain: "math-app-v1-6ddcf.firebaseapp.com",
-  projectId: "math-app-v1-6ddcf",
-  storageBucket: "math-app-v1-6ddcf.firebasestorage.app",
-  messagingSenderId: "974155148852",
-  appId: "1:974155148852:web:84a7c92599fd36ed596461",
-  measurementId: "G-XY875PTQTW"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const appId = firebaseConfig.appId;

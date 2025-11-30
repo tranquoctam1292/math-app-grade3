@@ -1,5 +1,13 @@
 // --- API CALL WITH RETRY & SAFETY ---
-const apiKey = "";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+// Kiểm tra xem đã đọc được key chưa (quan trọng)
+if (!apiKey) {
+  console.error("❌ LỖI: Không tìm thấy VITE_GEMINI_API_KEY. Vui lòng kiểm tra file .env và khởi động lại server.");
+} else {
+  console.log("✅ Đã nạp API Key thành công (Độ dài: " + apiKey.length + ")");
+}
+
 const MODEL_NAME = "gemini-2.0-flash";
 
 export const callGemini = async (prompt) => {
