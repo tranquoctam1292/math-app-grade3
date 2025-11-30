@@ -23,7 +23,6 @@ export const solveSimpleExpression = (text) => {
             .replace(/÷/g, '/');
 
         // 2. Bảo mật (Whitelist Check)
-        // Đã sửa Regex: bỏ escape \ thừa, chuyển dấu - xuống cuối để không bị hiểu lầm là khoảng (range)
         if (/[^0-9+*/().\s-]/.test(clean)) {
             return null;
         }
@@ -36,7 +35,59 @@ export const solveSimpleExpression = (text) => {
         
         return (isFinite(result) && !isNaN(result)) ? Math.round(result) : null; 
     } catch {
-        // Bỏ biến (e) đi vì không dùng đến để tránh lỗi ESLint
+        return null;
+    }
+};
+
+// --- HÀM MỚI: XỬ LÝ BÀI TOÁN SO SÁNH ---
+export const solveComparison = (text) => {
+    try {
+        // Chỉ xử lý nếu có dấu "..." hoặc từ "với" làm mốc so sánh
+        if (!text.includes('...') && !text.includes(' với ')) return null;
+
+        const separator = text.includes('...') ? '...' : ' với ';
+        const parts = text.split(separator);
+        
+        if (parts.length !== 2) return null;
+
+        // Hàm helper để tính giá trị một vế
+        const calcSide = (str) => {
+            // Lấy phần số và phép toán, loại bỏ chữ cái (ví dụ: "So sánh 5" -> "5")
+            let clean = str.toLowerCase()
+                .replace(/so sánh/g, '')
+                .replace(/điền dấu/g, '')
+                .replace(/compare/g, '')
+                .replace(/x/g, '*')
+                .replace(/×/g, '*')
+                .replace(/:/g, '/')
+                .replace(/÷/g, '/')
+                .trim();
+            
+            // Nếu chỉ là số thì parse luôn
+            if (/^\d+$/.test(clean)) return parseInt(clean);
+
+            // Nếu là biểu thức thì dùng Function (nhưng phải check whitelist trước)
+            if (/[^0-9+*/().\s-]/.test(clean)) return null; 
+            if (!clean) return null;
+
+            try {
+                return new Function('return ' + clean)();
+            } catch {
+                return null;
+            }
+        };
+
+        const val1 = calcSide(parts[0]);
+        const val2 = calcSide(parts[1]);
+
+        // Nếu không tính được một trong hai vế thì bỏ qua
+        if (val1 === null || val2 === null || isNaN(val1) || isNaN(val2)) return null;
+
+        if (val1 > val2) return '>';
+        if (val1 < val2) return '<';
+        return '=';
+    } catch { 
+        // ĐÃ SỬA: Bỏ (e) ở đây để hết lỗi ESLint
         return null;
     }
 };
