@@ -2,27 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircle, XCircle, ArrowRight, ArrowLeft,
   Trophy, Lightbulb, ListChecks,
-  Home,Ql, Play, RotateCcw,
+  Home, Play, RotateCcw,
   PiggyBank, Settings, Loader,
-  Sparkles, Bot, ShoppingBag, Banknote, Cloud,QN, RefreshCw, Save, Sliders, Edit3, Plus, Minus, Wand2,
+  Sparkles, Bot, ShoppingBag, Banknote, Cloud, RefreshCw, Save, Sliders, Edit3, Plus, Minus, Wand2,
   BookOpen, Calculator, Brain, Target, Calendar, Shapes, Sigma, BarChart3, Hash,
-  User, Users, UserPlus, LogOut, Clock, HelpCircle, Gift, WifiOff, Lock,YW, ShieldCheck, ShieldAlert, AlertTriangle,
-  Mail, Key, Smartphone, LogIn, UserCheck, UserCog, Frown, Smile,QD, Bell
+  User, Users, UserPlus, LogOut, Clock, HelpCircle, Gift, WifiOff, Lock, ShieldCheck, ShieldAlert, AlertTriangle,
+  Mail, Key, Smartphone, LogIn, UserCheck, UserCog, Frown, Smile, Bell
 } from 'lucide-react';
 import {
-  signInAnonymously, onAuthStateChanged, signInWithCustomToken,YX, signOut
+  signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut
 } from 'firebase/auth';
 import {
-  doc, setDoc,MX, getDoc, updateDoc
+  doc, setDoc, getDoc, updateDoc
 } from 'firebase/firestore';
 
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
-import { getDeviceId,YB, fmt, solveSimpleExpression, solveComparison, encodeEmail } from './lib/utils.js';
+import { getDeviceId, fmt, solveSimpleExpression, solveComparison, encodeEmail } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
 import { 
   TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, 
-  REWARD_PER_LEVEL, DIFFICULTY_MIX,ZX, SHOP_ITEMS, AVATARS,MJ, BACKUP_QUESTIONS 
+  REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS, BACKUP_QUESTIONS 
 } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
 
@@ -33,7 +33,8 @@ import HomeScreen from './components/HomeScreen';
 // Import các component còn lại (Lazy load)
 const ProfileScreen = React.lazy(() => import('./components/ProfileScreen'));
 const UserProfileScreen = React.lazy(() => import('./components/UserProfileScreen'));
-constQV = React.lazy(() => import('./components/QuizScreen'));
+// SỬA LỖI: Thêm khoảng trắng giữa const và QV
+const QV = React.lazy(() => import('./components/QuizScreen'));
 const ResultScreen = React.lazy(() => import('./components/ResultScreen'));
 const ReportScreen = React.lazy(() => import('./components/ReportScreen'));
 const ConfigScreen = React.lazy(() => import('./components/ConfigScreen'));
@@ -44,8 +45,8 @@ const getRandomConstraints = () => {
     const constraints = [
         "Ưu tiên sử dụng các số lẻ trong phép tính.",
         "Ưu tiên sử dụng các số chẵn và số tròn chục.",
-        "Kết quả các phép tính nên lớn hơn 50.",
-        "Kết quả các phép tính nên nhỏ hơn 100.",
+        "Kết quả các phép tính nên lớn hơn 100.",
+        "Kết quả các phép tính nên nhỏ hơn 50.",
         "Trong bài toán đố, hãy sử dụng tên các nhân vật trong truyện cổ tích Việt Nam (Tấm, Cám, Thạch Sanh...).",
         "Trong bài toán đố, hãy sử dụng bối cảnh về phi hành gia và vũ trụ.",
         "Trong bài toán đố, hãy sử dụng bối cảnh về các loài động vật dưới biển.",
@@ -326,48 +327,55 @@ const MathApp = () => {
       setAppError(null);
 
       // --- TẠO CÁC YẾU TỐ NGẪU NHIÊN ĐỂ "F5" BỘ NHỚ AI ---
-      const randomSeed = Math.floor(Math.random() * 1000000); // Số ngẫu nhiên
-      const dynamicConstraint = getRandomConstraints(); // Chỉ thị ngẫu nhiên
+      const randomSeed = Math.floor(Math.random() * 1000000); 
+      const dynamicConstraint = getRandomConstraints(); 
 
       const cacheKey = `math_quiz_cache_${config.difficultyMode}_${config.semester}_${config.selectedTopics.sort().join('_')}`;
       const levelCounts = DIFFICULTY_MIX[config.difficultyMode] || DIFFICULTY_MIX['medium'];
       const topicIds = config.selectedTopics;
       const topicLabels = TOPICS_LIST.filter(t => topicIds.includes(t.id)).map(t => t.label).join(", ");
-      const excludedTopics = TOPICS_LIST.filter(t => !topicIds.includes(t.id)).map(t => t.label).join(", ");
+      
+      // Lấy nội dung chi tiết dựa theo học kỳ
       const semesterDetail = SEMESTER_CONTENT[config.semester] || SEMESTER_CONTENT['hk2'];
-      const countsPrompt = Object.entries(levelCounts).map(([lvl, count]) => count > 0 ? `- Mức ${lvl}: ${count} câu` : null).filter(Boolean).join('\n');
+      
+      // Tạo chuỗi mô tả số lượng câu hỏi từng level
+      const countsPrompt = Object.entries(levelCounts)
+        .map(([lvl, count]) => count > 0 ? `- Level ${lvl}: ${count} câu` : null)
+        .filter(Boolean).join('\n');
+        
       const themes = ["Đi chợ/Siêu thị", "Nông trại vui vẻ", "Trường học thân thiện", "Thế giới động vật", "Thám hiểm vũ trụ", "Lễ hội trái cây", "Thể thao năng động"];
       const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
       const aiPrompt = `
         Mã phiên làm việc: ${randomSeed} (Hãy tạo bộ câu hỏi hoàn toàn mới dựa trên mã này).
-        Vai trò: Giáo viên Toán lớp 3 sáng tạo. Nhiệm vụ: Tạo 10 câu trắc nghiệm JSON ĐA DẠNG.
+        Vai trò: Giáo viên Toán lớp 3 (Việt Nam) chuyên nghiệp.
+        Nhiệm vụ: Tạo 10 câu trắc nghiệm JSON ĐA DẠNG.
         
-        CHỦ ĐỀ CỐT TRUYỆN: ${randomTheme}.
-        YÊU CẦU ĐẶC BIỆT CHO LẦN NÀY: ${dynamicConstraint}
+        1. BỐI CẢNH & NỘI DUNG:
+        - Học kỳ: ${config.semester === 'hk1' ? 'HỌC KỲ 1 (Sách giáo khoa Tập 1)' : 'HỌC KỲ 2 (Sách giáo khoa Tập 2)'}.
+        - Chủ đề cốt truyện: ${randomTheme}.
+        - Yêu cầu đặc biệt: ${dynamicConstraint}
         
-        CẤU HÌNH SỐ LƯỢNG:
+        - KIẾN THỨC CẦN PHỦ:
+        ${semesterDetail}
+        (Tập trung vào: ${topicLabels})
+
+        2. CẤU HÌNH ĐỘ KHÓ (BẮT BUỘC):
         ${countsPrompt}
         
-        KIẾN THỨC TRỌNG TÂM: ${topicLabels}.
-        Chi tiết chương trình: ${semesterDetail}.
-        
-        YÊU CẦU ĐA DẠNG HÓA (Bắt buộc):
-        1. Thay đổi cấu trúc câu hỏi liên tục: Đừng chỉ hỏi "Tính...", hãy hỏi "Tìm số còn thiếu", "So sánh", "Điền vào chỗ trống".
-        2. Với Toán đố: Sử dụng tên nhân vật, đồ vật phong phú theo chủ đề "${randomTheme}".
-        
-        QUY TẮC HIỂN THỊ (NGHIÊM NGẶT):
-        1. Dùng ký hiệu '×' cho phép nhân, ':' cho phép chia. KHÔNG DÙNG LaTeX trong text.
-        2. NGÔN NGỮ: 100% TIẾNG VIỆT chuẩn.
-        CẤM: ${excludedTopics}, Số thập phân.
+        3. ĐỊNH NGHĨA LEVEL (CHUẨN SGK LỚP 3):
+        - Level 1 (Nhận biết): Tính nhẩm trong bảng nhân/chia, đọc/viết số, xem đồng hồ đúng, nhận biết góc vuông/không vuông.
+        - Level 2 (Thông hiểu): Cộng/trừ/nhân/chia đặt tính (có nhớ 1 lần), đổi đơn vị (mm, g, ml), tính chu vi hình đơn giản.
+        - Level 3 (Vận dụng): Tính giá trị biểu thức (nhân chia trước), Tìm x (thành phần chưa biết), Toán đố 1 bước tính.
+        - Level 4 (Vận dụng cao): Toán đố 2 bước tính (gấp lên/giảm đi), Quy luật dãy số, Bài toán diện tích/chu vi tổng hợp, Tư duy logic.
 
-        QUY TẮC LOGIC:
-        1. ĐỒNG NHẤT ĐƠN VỊ trong 4 đáp án.
-        2. KHÔNG TRÙNG LẶP GIÁ TRỊ giữa các đáp án.
-        3. LUÔN TRẢ VỀ ĐỦ 4 OPTIONS.
+        4. QUY TẮC HIỂN THỊ (NGHIÊM NGẶT):
+        - Dùng ký hiệu '×' (nhân), ':' (chia). KHÔNG DÙNG LaTeX.
+        - NGÔN NGỮ: 100% TIẾNG VIỆT chuẩn, văn phong thân thiện với trẻ em.
+        - ĐÁP ÁN: 4 lựa chọn, chỉ 1 đúng. Đáp án nhiễu phải hợp lý (sai do tính toán sai 1 bước).
 
         OUTPUT JSON FORMAT:
-        [{"text": "...", "options": ["A", "B", "C", "D"], "correctVal": "...", "explanation": "...", "level": 2, "topic": "arithmetic"}]
+        [{"text": "...", "options": ["A", "B", "C", "D"], "correctVal": "...", "explanation": "...", "level": 1, "topic": "arithmetic"}]
       `;
       
       let questions = [];
@@ -467,7 +475,7 @@ const MathApp = () => {
             options: opts, 
             correctOption: labels[correctIdx], 
             correctVal: correctVal, 
-            level: q.level || 3, 
+            level: q.level || 2, // Mặc định level 2 nếu AI quên trả về
             topic: TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic' 
           };
       });
@@ -491,7 +499,7 @@ const MathApp = () => {
       const currentQ = quizData[currentQIndex];
       const isCorrect = optLabel === currentQ.correctOption;
       let reward = 0;
-      if (isCorrect) { reward = REWARD_PER_LEVEL[currentQ.level] || 300; setSessionScore(prev => prev + reward); }
+      if (isCorrect) { reward = REWARD_PER_LEVEL[currentQ.level] || 200; setSessionScore(prev => prev + reward); }
       
       setHistory(prev => [...prev, { ...currentQ, userAnswer: optLabel, isCorrect, reward, timeTaken }]);
       setIsSubmitted(true);
