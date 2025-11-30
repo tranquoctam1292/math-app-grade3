@@ -18,10 +18,8 @@ import {
 
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
-// Import thêm solveComparison
 import { getDeviceId, fmt, solveSimpleExpression, solveComparison, encodeEmail } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
-// Import thêm BACKUP_QUESTIONS từ constants
 import { 
   TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, 
   REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS, BACKUP_QUESTIONS 
@@ -31,6 +29,7 @@ import { db, auth, appId } from './lib/firebase';
 // Import components
 import AuthScreen from './components/AuthScreen';
 import HomeScreen from './components/HomeScreen';
+
 // Import các component còn lại (Lazy load)
 const ProfileScreen = React.lazy(() => import('./components/ProfileScreen'));
 const UserProfileScreen = React.lazy(() => import('./components/UserProfileScreen'));
@@ -153,31 +152,26 @@ const MathApp = () => {
       return;
     }
 
-    // Chỉ chạy init một lần duy nhất
     const initSystemAuth = async () => {
         try {
             const initialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
             if (initialAuthToken) {
                 await signInWithCustomToken(auth, initialAuthToken); 
             } else {
-                // Chỉ sign-in ẩn danh nếu chưa có user
                 if (!auth.currentUser) {
                     await signInAnonymously(auth);
                 }
             }
         } catch(e) { 
             console.error("Lỗi xác thực hệ thống:", e); 
-            // Fallback
             if (!auth.currentUser) {
                 await signInAnonymously(auth); 
             }
         }
     };
     
-    // Gọi hàm init
     initSystemAuth();
     
-    // Lắng nghe thay đổi auth state
     const unsubscribe = onAuthStateChanged(auth, (u) => {
         setFirebaseUser(u);
         
@@ -200,7 +194,7 @@ const MathApp = () => {
     });
 
     return () => unsubscribe();
-  }, []); // <--- QUAN TRỌNG: Dependency array rỗng để chỉ chạy 1 lần khi mount
+  }, []);
 
   // --- TẢI HỒ SƠ & DỮ LIỆU BAN ĐẦU ---
   useEffect(() => {
@@ -312,10 +306,7 @@ const MathApp = () => {
       setIsGenerating(true);
       setAppError(null);
 
-      // Key để lưu/đọc Cache
       const cacheKey = `math_quiz_cache_${config.difficultyMode}_${config.semester}_${config.selectedTopics.sort().join('_')}`;
-      
-      // Chuẩn bị tham số cho AI
       const levelCounts = DIFFICULTY_MIX[config.difficultyMode] || DIFFICULTY_MIX['medium'];
       const topicIds = config.selectedTopics;
       const topicLabels = TOPICS_LIST.filter(t => topicIds.includes(t.id)).map(t => t.label).join(", ");
@@ -360,7 +351,6 @@ const MathApp = () => {
       let isFallback = false;
 
       try {
-          // --- ƯU TIÊN 1: GỌI AI ---
           const aiResult = await callGemini(aiPrompt);
           if (aiResult && Array.isArray(aiResult) && aiResult.length > 0) {
               questions = aiResult.slice(0, 10);
@@ -369,10 +359,7 @@ const MathApp = () => {
           }
       } catch (e) {
           console.warn("Lỗi AI, đang thử tìm Cache hoặc Offline:", e);
-          
-          // --- ƯU TIÊN 2: AI LỖI -> TÌM TRONG CACHE (Bài tập cũ) ---
           const cachedData = localStorage.getItem(cacheKey);
-          let foundCache = false;
           
           if (cachedData) {
               try {
@@ -386,17 +373,16 @@ const MathApp = () => {
                       setAppError(null);
                       setIsGenerating(false);
                       showNotification('success', "Mất kết nối AI. Đang dùng bài tập đã lưu!");
-                      return; // THOÁT NGAY, dùng dữ liệu cache đã format sẵn
+                      return; 
                   }
               } catch (cacheErr) {
                   console.error("Lỗi đọc cache:", cacheErr);
               }
           }
 
-          // --- ƯU TIÊN 3: KHÔNG CÓ CACHE -> DÙNG HARDCODED BACKUP ---
           const shuffledBackup = [...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random());
           questions = shuffledBackup.slice(0, 10);
-          isFallback = true; // Đánh dấu là fallback để không lưu đè cache xịn
+          isFallback = true; 
 
           if (!questions || questions.length === 0) {
              showNotification('error', "Mạng yếu và không có dữ liệu offline. Thử lại sau!");
@@ -407,12 +393,10 @@ const MathApp = () => {
           showNotification('error', "Đang dùng chế độ Offline (Bộ câu hỏi mẫu)!");
       }
       
-      // --- XỬ LÝ & FORMAT CÂU HỎI (Cho AI hoặc Backup) ---
       const formattedQuiz = questions.map((q, idx) => {
           let opts = q.options || [];
           let correctVal = String(q.correctVal).trim();
           
-          // Tự động kiểm tra và sửa đáp án (cả số học và so sánh)
           const verifiedExpression = solveSimpleExpression(q.text);
           const verifiedComparison = solveComparison(q.text);
 
@@ -429,7 +413,6 @@ const MathApp = () => {
               opts[0] = correctVal; 
           }
           
-          // Bổ sung đáp án nhiễu
           while(opts.length < 4) {
               if (['>', '<', '='].includes(correctVal)) {
                   const signs = ['>', '<', '=', '+'];
@@ -466,7 +449,6 @@ const MathApp = () => {
           };
       });
       
-      // --- LƯU CACHE: Chỉ lưu nếu là dữ liệu mới từ AI ---
       if (!isFallback && questions.length > 0) {
           localStorage.setItem(cacheKey, JSON.stringify({
               timestamp: Date.now(),
@@ -535,11 +517,11 @@ const MathApp = () => {
               difficultyMode: config.difficultyMode,
               semester: config.semester,
               questions: history.map(h => ({
-                  text: h.text,           // <--- CẬP NHẬT MỚI: Nội dung câu hỏi
-                  userAnswer: h.userAnswer, // <--- CẬP NHẬT MỚI: Đáp án bé chọn
-                  correctOption: h.correctOption, // <--- CẬP NHẬT MỚI: Đáp án đúng
-                  correctVal: h.correctVal, // <--- CẬP NHẬT MỚI: Giá trị đúng
-                  explanation: h.explanation, // <--- CẬP NHẬT MỚI: Lời giải thích
+                  text: h.text,
+                  userAnswer: h.userAnswer,
+                  correctOption: h.correctOption,
+                  correctVal: h.correctVal,
+                  explanation: h.explanation,
                   isCorrect: h.isCorrect,
                   topic: h.topic,
                   level: h.level,
@@ -588,6 +570,7 @@ const MathApp = () => {
           case 'result':
               return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
           case 'report':
+              // SỬA Ở ĐÂY: Thêm prop setConfig
               return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} setConfig={setConfig} />; 
           case 'shop':
               return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} />; 
@@ -607,7 +590,6 @@ const MathApp = () => {
             {getScreenComponent()}
         </React.Suspense>
         
-        {/* APP ERROR NOTIFICATION */}
         {appError && (
             <div className="absolute top-10 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl z-50 flex items-center shadow-lg animation-fade-in">
                 <WifiOff size={20} className="mr-2" />
@@ -616,7 +598,6 @@ const MathApp = () => {
             </div>
         )}
 
-        {/* TOAST NOTIFICATION SYSTEM */}
         {notification && (
              <div className={`absolute top-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-2xl font-black text-sm text-white flex items-center gap-3 animation-fade-in ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`} style={{minWidth: 'fit-content', whiteSpace: 'nowrap'}}>
                 {notification.type === 'success' ? <CheckCircle size={20} className="text-white"/> : <AlertTriangle size={20} className="text-white"/>}
