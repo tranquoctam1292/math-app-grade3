@@ -24,7 +24,7 @@ export const callGemini = async (prompt) => {
       contents: [{ parts: [{ text: prompt }] }], 
       generationConfig: { 
         responseMimeType: "application/json", 
-        temperature: 0.2, 
+        temperature: 0.45, 
         responseSchema: {
           type: "ARRAY",
           items: {

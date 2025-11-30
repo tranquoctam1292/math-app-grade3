@@ -2,27 +2,27 @@ import React, { useState, useEffect } from 'react';
 import {
   CheckCircle, XCircle, ArrowRight, ArrowLeft,
   Trophy, Lightbulb, ListChecks,
-  Home, Play, RotateCcw,
+  Home,Ql, Play, RotateCcw,
   PiggyBank, Settings, Loader,
-  Sparkles, Bot, ShoppingBag, Banknote, Cloud, RefreshCw, Save, Sliders, Edit3, Plus, Minus, Wand2,
+  Sparkles, Bot, ShoppingBag, Banknote, Cloud,QN, RefreshCw, Save, Sliders, Edit3, Plus, Minus, Wand2,
   BookOpen, Calculator, Brain, Target, Calendar, Shapes, Sigma, BarChart3, Hash,
-  User, Users, UserPlus, LogOut, Clock, HelpCircle, Gift, WifiOff, Lock, ShieldCheck, ShieldAlert, AlertTriangle,
-  Mail, Key, Smartphone, LogIn, UserCheck, UserCog, Frown, Smile, Bell
+  User, Users, UserPlus, LogOut, Clock, HelpCircle, Gift, WifiOff, Lock,YW, ShieldCheck, ShieldAlert, AlertTriangle,
+  Mail, Key, Smartphone, LogIn, UserCheck, UserCog, Frown, Smile,QD, Bell
 } from 'lucide-react';
 import {
-  signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut
+  signInAnonymously, onAuthStateChanged, signInWithCustomToken,YX, signOut
 } from 'firebase/auth';
 import {
-  doc, setDoc, getDoc, updateDoc
+  doc, setDoc,MX, getDoc, updateDoc
 } from 'firebase/firestore';
 
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
-import { getDeviceId, fmt, solveSimpleExpression, solveComparison, encodeEmail } from './lib/utils.js';
+import { getDeviceId,YB, fmt, solveSimpleExpression, solveComparison, encodeEmail } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
 import { 
   TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, 
-  REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS, BACKUP_QUESTIONS 
+  REWARD_PER_LEVEL, DIFFICULTY_MIX,ZX, SHOP_ITEMS, AVATARS,MJ, BACKUP_QUESTIONS 
 } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
 
@@ -33,11 +33,30 @@ import HomeScreen from './components/HomeScreen';
 // Import các component còn lại (Lazy load)
 const ProfileScreen = React.lazy(() => import('./components/ProfileScreen'));
 const UserProfileScreen = React.lazy(() => import('./components/UserProfileScreen'));
-const QuizScreen = React.lazy(() => import('./components/QuizScreen'));
+constQV = React.lazy(() => import('./components/QuizScreen'));
 const ResultScreen = React.lazy(() => import('./components/ResultScreen'));
 const ReportScreen = React.lazy(() => import('./components/ReportScreen'));
 const ConfigScreen = React.lazy(() => import('./components/ConfigScreen'));
 const ShopScreen = React.lazy(() => import('./components/ShopScreen'));
+
+// --- HELPER: TẠO RÀNG BUỘC NGẪU NHIÊN ĐỂ AI KHÔNG BỊ LẶP ---
+const getRandomConstraints = () => {
+    const constraints = [
+        "Ưu tiên sử dụng các số lẻ trong phép tính.",
+        "Ưu tiên sử dụng các số chẵn và số tròn chục.",
+        "Kết quả các phép tính nên lớn hơn 50.",
+        "Kết quả các phép tính nên nhỏ hơn 100.",
+        "Trong bài toán đố, hãy sử dụng tên các nhân vật trong truyện cổ tích Việt Nam (Tấm, Cám, Thạch Sanh...).",
+        "Trong bài toán đố, hãy sử dụng bối cảnh về phi hành gia và vũ trụ.",
+        "Trong bài toán đố, hãy sử dụng bối cảnh về các loài động vật dưới biển.",
+        "Hãy tạo ít nhất 1 câu hỏi về tìm quy luật dãy số.",
+        "Hãy tạo ít nhất 1 câu hỏi yêu cầu so sánh (lớn hơn, bé hơn) có phép tính ở 2 vế.",
+        `Hãy sử dụng các số kết thúc bằng ${Math.floor(Math.random() * 9)}.`
+    ];
+    // Lấy ngẫu nhiên 2 chỉ thị để phối hợp
+    const shuffled = constraints.sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 2).join(" ");
+};
 
 // --- MAIN APP ---
 const MathApp = () => {
@@ -306,6 +325,10 @@ const MathApp = () => {
       setIsGenerating(true);
       setAppError(null);
 
+      // --- TẠO CÁC YẾU TỐ NGẪU NHIÊN ĐỂ "F5" BỘ NHỚ AI ---
+      const randomSeed = Math.floor(Math.random() * 1000000); // Số ngẫu nhiên
+      const dynamicConstraint = getRandomConstraints(); // Chỉ thị ngẫu nhiên
+
       const cacheKey = `math_quiz_cache_${config.difficultyMode}_${config.semester}_${config.selectedTopics.sort().join('_')}`;
       const levelCounts = DIFFICULTY_MIX[config.difficultyMode] || DIFFICULTY_MIX['medium'];
       const topicIds = config.selectedTopics;
@@ -317,34 +340,34 @@ const MathApp = () => {
       const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
       const aiPrompt = `
-        Vai trò: Giáo viên Toán lớp 3 sáng tạo. Nhiệm vụ: Tạo 10 câu trắc nghiệm JSON ĐA DẠNG, KHÔNG TRÙNG LẶP.
-        CHỦ ĐỀ CỐT TRUYỆN: ${randomTheme} (Hãy lồng ghép bối cảnh này vào các câu toán đố).
-        CẤU HÌNH: ${countsPrompt}. Học kỳ: ${config.semester}.
-        Kiến thức trọng tâm: ${topicLabels}.
+        Mã phiên làm việc: ${randomSeed} (Hãy tạo bộ câu hỏi hoàn toàn mới dựa trên mã này).
+        Vai trò: Giáo viên Toán lớp 3 sáng tạo. Nhiệm vụ: Tạo 10 câu trắc nghiệm JSON ĐA DẠNG.
+        
+        CHỦ ĐỀ CỐT TRUYỆN: ${randomTheme}.
+        YÊU CẦU ĐẶC BIỆT CHO LẦN NÀY: ${dynamicConstraint}
+        
+        CẤU HÌNH SỐ LƯỢNG:
+        ${countsPrompt}
+        
+        KIẾN THỨC TRỌNG TÂM: ${topicLabels}.
         Chi tiết chương trình: ${semesterDetail}.
         
         YÊU CẦU ĐA DẠNG HÓA (Bắt buộc):
-        1. Thay đổi cấu trúc câu hỏi liên tục: 
-           - Đừng chỉ hỏi "Tính...", hãy hỏi "Tìm số còn thiếu", "So sánh", "Điền vào chỗ trống", "Giải đố".
-           - Xen kẽ giữa Phép tính thuần túy và Toán đố (Word Problems).
-        2. Với Toán đố: Sử dụng tên nhân vật, đồ vật, tình huống thực tế phong phú theo chủ đề "${randomTheme}".
+        1. Thay đổi cấu trúc câu hỏi liên tục: Đừng chỉ hỏi "Tính...", hãy hỏi "Tìm số còn thiếu", "So sánh", "Điền vào chỗ trống".
+        2. Với Toán đố: Sử dụng tên nhân vật, đồ vật phong phú theo chủ đề "${randomTheme}".
         
         QUY TẮC HIỂN THỊ (NGHIÊM NGẶT):
-        1. Dùng ký hiệu '×' cho phép nhân, ':' cho phép chia (dạng Unicode). TUYỆT ĐỐI KHÔNG DÙNG LaTeX (\\times, \\div) trong text.
-        2. Dùng 'x' cho biến số tìm x.
-        3. NGÔN NGỮ: 100% TIẾNG VIỆT chuẩn. TUYỆT ĐỐI KHÔNG chèn từ tiếng Anh, tiếng Nga hay mở ngoặc giải thích tiếng nước ngoài.
+        1. Dùng ký hiệu '×' cho phép nhân, ':' cho phép chia. KHÔNG DÙNG LaTeX trong text.
+        2. NGÔN NGỮ: 100% TIẾNG VIỆT chuẩn.
         CẤM: ${excludedTopics}, Số thập phân.
 
-        QUY TẮC LOGIC VÀ ĐÁP ÁN (CỰC KỲ QUAN TRỌNG):
-        1. ĐỒNG NHẤT ĐƠN VỊ: Tất cả 4 đáp án phải có cùng một đơn vị đo. (Ví dụ: Nếu đáp án đúng là "3 m", các đáp án sai cũng phải là "m". CẤM trộn lẫn "300 cm" và "3 m").
-        2. KHÔNG TRÙNG LẶP GIÁ TRỊ: Tuyệt đối không đưa ra 2 đáp án có giá trị bằng nhau (Ví dụ: "1 giờ" và "60 phút" là trùng -> CẤM).
-        3. ĐỘ LỚN TƯƠNG ĐỒNG: Các đáp án sai phải có giá trị gần với đáp án đúng (Ví dụ: Đáp án là 1000, thì câu sai nên là 900, 1100... KHÔNG ĐƯỢC là 5 hay 10).
-        4. ĐẦY ĐỦ ĐƠN VỊ: Nếu đáp án đúng có đơn vị (ví dụ: "quyển vở"), thì TẤT CẢ đáp án sai cũng phải có chữ "quyển vở" đi kèm.
-        5. LUÔN TRẢ VỀ ĐỦ 4 OPTIONS: Không được thiếu.
+        QUY TẮC LOGIC:
+        1. ĐỒNG NHẤT ĐƠN VỊ trong 4 đáp án.
+        2. KHÔNG TRÙNG LẶP GIÁ TRỊ giữa các đáp án.
+        3. LUÔN TRẢ VỀ ĐỦ 4 OPTIONS.
 
         OUTPUT JSON FORMAT:
-        // Đảm bảo correctVal và options là STRING để chứa đơn vị
-        [{"text": "...", "options": ["10", "12", "14"], "correctVal": "12", "explanation": "...", "level": 2, "topic": "arithmetic"}]
+        [{"text": "...", "options": ["A", "B", "C", "D"], "correctVal": "...", "explanation": "...", "level": 2, "topic": "arithmetic"}]
       `;
       
       let questions = [];
@@ -566,11 +589,12 @@ const MathApp = () => {
           case 'home':
               return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} isAuthReady={isAuthReady} />; 
           case 'playing':
-              return <QuizScreen quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} />; 
+              return <React.Suspense fallback={<div className="flex items-center justify-center h-full"><Loader className="animate-spin text-indigo-500"/></div>}>
+                  <QV quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} />
+              </React.Suspense>;
           case 'result':
               return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
           case 'report':
-              // SỬA Ở ĐÂY: Thêm prop setConfig
               return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} setConfig={setConfig} />; 
           case 'shop':
               return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} />; 
