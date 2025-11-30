@@ -15,16 +15,28 @@ export const fmt = (num) => {
 
 export const solveSimpleExpression = (text) => {
     try {
-        if (!/[\+\-\*\/x:×]/.test(text)) return null;
+        // 1. Chuẩn hóa phép toán
         const clean = text.toLowerCase()
             .replace(/x/g, '*')
             .replace(/×/g, '*')
             .replace(/:/g, '/')
-            .replace(/[^\d\+\-\*\/().]/g, ' '); 
-        if (!/[\+\-\*\/]/.test(clean)) return null;
+            .replace(/÷/g, '/');
+
+        // 2. Bảo mật (Whitelist Check)
+        // Đã sửa Regex: bỏ escape \ thừa, chuyển dấu - xuống cuối để không bị hiểu lầm là khoảng (range)
+        if (/[^0-9+*/().\s-]/.test(clean)) {
+            return null;
+        }
+
+        // 3. Kiểm tra xem có phép toán nào không
+        if (!/[+\-*/]/.test(clean)) return null;
+
+        // 4. Thực thi an toàn
         const result = new Function('return ' + clean)();
-        return isNaN(result) ? null : Math.round(result); 
-    } catch (e) {
+        
+        return (isFinite(result) && !isNaN(result)) ? Math.round(result) : null; 
+    } catch {
+        // Bỏ biến (e) đi vì không dùng đến để tránh lỗi ESLint
         return null;
     }
 };

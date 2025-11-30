@@ -22,8 +22,7 @@ import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './lib/util
 import { callGemini } from './lib/gemini.js';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
-import { BACKUP_QUESTIONS } from './lib/backupData.js'; 
-import { TOPICS_LIST, TOPIC_TRANSLATIONS, ... } from './lib/constants.js';
+import { BACKUP_QUESTIONS } from './lib/backupData.js';
 
 // Import components
 import AuthScreen from './components/AuthScreen';
