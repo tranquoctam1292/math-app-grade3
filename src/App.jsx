@@ -318,12 +318,15 @@ const MathApp = () => {
         QUY TẮC HIỂN THỊ (NGHIÊM NGẶT):
         1. Dùng ký hiệu '×' cho phép nhân, ':' cho phép chia (dạng Unicode). TUYỆT ĐỐI KHÔNG DÙNG LaTeX (\\times, \\div) trong text.
         2. Dùng 'x' cho biến số tìm x.
+        3. NGÔN NGỮ: 100% TIẾNG VIỆT chuẩn. TUYỆT ĐỐI KHÔNG chèn từ tiếng Anh, tiếng Nga hay mở ngoặc giải thích tiếng nước ngoài.
         CẤM: ${excludedTopics}, Số thập phân.
 
-        QUY TẮC LOGIC (AN TOÀN):
-        1. Đáp án sai (options) phải là các số CÓ NGHĨA (do tính nhầm), TUYỆT ĐỐI KHÔNG ghép các con số trong đề lại với nhau.
-        2. Các đáp án phải cùng đơn vị đo lường (nếu có).
-        3. Suy luận từng bước (Chain-of-Thought) để đảm bảo đáp án đúng 100%.
+        QUY TẮC LOGIC VÀ ĐÁP ÁN (CỰC KỲ QUAN TRỌNG):
+        1. ĐỒNG NHẤT ĐƠN VỊ: Tất cả 4 đáp án phải có cùng một đơn vị đo. (Ví dụ: Nếu đáp án đúng là "3 m", các đáp án sai cũng phải là "m". CẤM trộn lẫn "300 cm" và "3 m").
+        2. KHÔNG TRÙNG LẶP GIÁ TRỊ: Tuyệt đối không đưa ra 2 đáp án có giá trị bằng nhau (Ví dụ: "1 giờ" và "60 phút" là trùng -> CẤM).
+        3. ĐỘ LỚN TƯƠNG ĐỒNG: Các đáp án sai phải có giá trị gần với đáp án đúng (Ví dụ: Đáp án là 1000, thì câu sai nên là 900, 1100... KHÔNG ĐƯỢC là 5 hay 10).
+        4. ĐẦY ĐỦ ĐƠN VỊ: Nếu đáp án đúng có đơn vị (ví dụ: "quyển vở"), thì TẤT CẢ đáp án sai cũng phải có chữ "quyển vở" đi kèm.
+        5. LUÔN TRẢ VỀ ĐỦ 4 OPTIONS: Không được thiếu.
 
         OUTPUT JSON FORMAT:
         // Đảm bảo correctVal và options là STRING để chứa đơn vị
@@ -362,12 +365,37 @@ const MathApp = () => {
               opts[0] = correctVal; 
           }
           
+            // --- BẮT ĐẦU ĐOẠN CODE SỬA ---
           // Đảm bảo đủ 4 options và không bị trùng, sau đó xáo trộn
-          while(opts.length < 4) opts.push(String(Math.floor(Math.random() * 100)));
+          while(opts.length < 4) {
+              // 1. Lấy giá trị số từ đáp án đúng
+              const valMatch = correctVal.match(/(\d+)/);
+              const baseVal = valMatch ? parseInt(valMatch[0]) : 50; 
+              
+              // 2. Tạo số giả ngẫu nhiên xung quanh số đúng (+- 20%) để gây nhiễu
+              let fakeNum = baseVal + Math.floor(Math.random() * 20) - 10;
+              if (fakeNum < 0) fakeNum = 0; // Không để số âm
+              if (fakeNum === baseVal) fakeNum = baseVal + 5; // Tránh trùng đáp án đúng
+
+              // 3. Lấy phần đơn vị (text) từ đáp án đúng để gắn vào số giả
+              // Ví dụ: correctVal = "5 quả cam" -> unitText = "quả cam"
+              const unitText = correctVal.replace(/[\d.,]+/g, '').trim(); 
+              
+              // 4. Ghép số giả + đơn vị
+              const fakeOption = unitText ? `${fakeNum} ${unitText}` : String(fakeNum);
+              
+              // 5. Chỉ thêm vào nếu chưa có trong danh sách
+              if (!opts.includes(fakeOption)) {
+                  opts.push(fakeOption);
+              }
+          }
+
+          // Lọc trùng và xáo trộn vị trí
           opts = [...new Set(opts.map(o => String(o).trim()))].sort(() => Math.random() - 0.5);
           
           const labels = ['A', 'B', 'C', 'D'];
           let correctIdx = opts.findIndex(o => o === correctVal);
+          // --- KẾT THÚC ĐOẠN CODE SỬA ---
           // Nếu sau khi shuffle mà đáp án đúng bị mất (vì lý do nào đó), đặt lại vào vị trí ngẫu nhiên
           if (correctIdx === -1) { 
             correctIdx = Math.floor(Math.random() * 4);
