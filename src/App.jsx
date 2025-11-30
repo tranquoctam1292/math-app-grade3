@@ -22,6 +22,8 @@ import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './lib/util
 import { callGemini } from './lib/gemini.js';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
+import { BACKUP_QUESTIONS } from './lib/backupData.js'; 
+import { TOPICS_LIST, TOPIC_TRANSLATIONS, ... } from './lib/constants.js';
 
 // Import components
 import AuthScreen from './components/AuthScreen';
@@ -342,10 +344,24 @@ const MathApp = () => {
               throw new Error("Dữ liệu AI không hợp lệ hoặc rỗng");
           }
       } catch (e) {
-          console.warn("Lỗi AI:", e);
-          setAppError("Mạng yếu hoặc AI đang bận. Vui lòng thử lại sau giây lát!");
-          setIsGenerating(false);
-          return;
+          console.warn("Lỗi AI, chuyển sang chế độ Offline:", e);
+          
+          // --- LOGIC MỚI: DÙNG CÂU HỎI DỰ PHÒNG KHI MẤT MẠNG/LỖI ---
+          // 1. Trộn ngẫu nhiên danh sách dự phòng
+          const shuffledBackup = [...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random());
+          
+          // 2. Lấy 10 câu đầu tiên
+          questions = shuffledBackup.slice(0, 10);
+
+          // 3. Nếu vẫn không có câu hỏi nào (file backup rỗng) thì mới báo lỗi
+          if (!questions || questions.length === 0) {
+             setAppError("Mạng yếu và không có dữ liệu offline. Vui lòng thử lại sau!");
+             setIsGenerating(false);
+             return;
+          }
+          
+          // Thông báo nhỏ để biết đang dùng backup (có thể bỏ qua)
+          console.log("⚠️ Đang sử dụng bộ câu hỏi dự phòng (Offline Mode)");
       }
       
       const formattedQuiz = questions.map((q, idx) => {
