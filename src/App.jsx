@@ -535,6 +535,11 @@ const MathApp = () => {
               difficultyMode: config.difficultyMode,
               semester: config.semester,
               questions: history.map(h => ({
+                  text: h.text,           // <--- CẬP NHẬT MỚI: Nội dung câu hỏi
+                  userAnswer: h.userAnswer, // <--- CẬP NHẬT MỚI: Đáp án bé chọn
+                  correctOption: h.correctOption, // <--- CẬP NHẬT MỚI: Đáp án đúng
+                  correctVal: h.correctVal, // <--- CẬP NHẬT MỚI: Giá trị đúng
+                  explanation: h.explanation, // <--- CẬP NHẬT MỚI: Lời giải thích
                   isCorrect: h.isCorrect,
                   topic: h.topic,
                   level: h.level,
@@ -583,7 +588,7 @@ const MathApp = () => {
           case 'result':
               return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
           case 'report':
-              return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} />; 
+              return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} setConfig={setConfig} />; 
           case 'shop':
               return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} />; 
           case 'config':
