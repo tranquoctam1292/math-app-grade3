@@ -1,4 +1,4 @@
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const axios = require("axios");
 
@@ -12,58 +12,72 @@ exports.generateQuestions = onCall({
 }, async (request) => {
   try {
     const prompt = request.data.prompt;
-    if (!prompt) return { error: "Client không gửi prompt." };
+    if (!prompt) {
+        throw new HttpsError('invalid-argument', 'Client không gửi prompt.');
+    }
 
     const DEEPSEEK_API_KEY = apiKey.value();
-    if (!DEEPSEEK_API_KEY) return { error: "Chưa cấu hình DEEPSEEK_API_KEY." };
+    if (!DEEPSEEK_API_KEY) {
+        throw new HttpsError('failed-precondition', 'Chưa cấu hình DEEPSEEK_API_KEY.');
+    }
 
     const url = "https://api.deepseek.com/chat/completions";
 
-    // 1. SỬA PROMPT: Yêu cầu rõ ràng trả về Object có key là "questions"
+    // 1. SỬA PROMPT: Bổ sung cấu trúc cho Sorting và Matching
     const jsonInstruction = `
     YÊU CẦU OUTPUT:
-    Hãy trả về một JSON OBJECT duy nhất (không phải Array, không có markdown).
-    Cấu trúc bắt buộc:
-    {
-      "questions": [
-        {
-          "id": 0,
-          "type": "mcq", 
-          "text": "Câu hỏi...",
-          "options": ["A", "B", "C", "D"],
-          "correctVal": "A",
-          "explanation": "Giải thích...",
-          "level": 2,
-          "topic": "arithmetic"
-        }
-      ]
-    }
+    Trả về đúng 1 JSON Object có cấu trúc: { "questions": [ ... ] }.
+    Tuyệt đối không viết thêm lời dẫn hay markdown.
     
-    Lưu ý:
-    - "type" chọn trong: ["mcq", "fill_blank", "comparison", "matching", "sorting"]
-    - "level" từ 2 đến 4.
+    Cấu trúc mỗi câu hỏi (object) trong mảng "questions" tùy theo "type":
+
+    1. Dạng Trắc nghiệm ("type": "mcq"):
+    {
+      "type": "mcq",
+      "text": "Câu hỏi...",
+      "options": ["A", "B", "C", "D"],
+      "correctVal": "A",
+      "explanation": "Giải thích...",
+      "level": 2, "topic": "arithmetic"
+    }
+
+    2. Dạng Sắp xếp ("type": "sorting"):
+    {
+      "type": "sorting",
+      "text": "Sắp xếp các số sau từ bé đến lớn...",
+      "items": ["50", "10", "30", "40"], // Danh sách các phần tử cần xếp
+      "correctOrder": ["10", "30", "40", "50"], // Thứ tự đúng
+      "explanation": "Giải thích...",
+      "level": 2, "topic": "arithmetic"
+    }
+
+    3. Dạng Ghép cặp ("type": "matching"):
+    {
+      "type": "matching",
+      "text": "Ghép phép tính với kết quả đúng",
+      "pairs": [
+        {"left": "2 + 2", "right": "4"},
+        {"left": "3 x 3", "right": "9"},
+        {"left": "10 - 5", "right": "5"}
+      ],
+      "explanation": "Giải thích...",
+      "level": 2, "topic": "arithmetic"
+    }
+
+    4. Các dạng khác ("fill_blank", "comparison"): Dùng cấu trúc giống "mcq" nhưng "correctVal" là đáp án đúng.
     `;
 
     const fullPrompt = jsonInstruction + "\n\n" + "NỘI DUNG YÊU CẦU:\n" + prompt;
 
-    const payload = {
+    const response = await axios.post(url, {
       model: "deepseek-chat",
       messages: [
-        { 
-          role: "system", 
-          content: "Bạn là chuyên gia toán học tiểu học. Bạn chỉ trả về JSON hợp lệ." 
-        },
-        { 
-          role: "user", 
-          content: fullPrompt 
-        }
+        { role: "system", content: "Bạn là chuyên gia tạo đề toán tiểu học. Chỉ trả về JSON." },
+        { role: "user", content: fullPrompt }
       ],
-      // DeepSeek ép kiểu JSON Object rất tốt, nên dùng nó để tránh lỗi cú pháp
       response_format: { type: "json_object" }, 
       temperature: 0.4
-    };
-
-    const response = await axios.post(url, payload, {
+    }, {
       headers: { 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
@@ -71,43 +85,31 @@ exports.generateQuestions = onCall({
     });
 
     const content = response.data?.choices?.[0]?.message?.content;
-    if (!content) throw new Error("DeepSeek không trả về nội dung.");
+    if (!content) throw new HttpsError('internal', "DeepSeek trả về rỗng.");
 
-    // 2. Xử lý JSON an toàn hơn
+    // Parse JSON an toàn
     let jsonStr = content.trim();
-    // Đôi khi DeepSeek vẫn bọc trong markdown ```json ... ```, cần lọc bỏ
     if (jsonStr.startsWith("```")) {
         jsonStr = jsonStr.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "");
     }
 
     try {
         const parsed = JSON.parse(jsonStr);
-        
-        // Luôn trả về mảng câu hỏi
         if (parsed.questions && Array.isArray(parsed.questions)) {
             return parsed.questions;
-        } else if (Array.isArray(parsed)) {
-            return parsed;
         }
+        if (Array.isArray(parsed)) return parsed;
         
-        // Nếu cấu trúc lạ, log ra để debug
-        console.error("Cấu trúc JSON không khớp:", JSON.stringify(parsed).slice(0, 100));
-        throw new Error("AI trả về JSON nhưng thiếu trường 'questions'.");
+        // Fallback
+        return [parsed]; 
 
     } catch (parseErr) {
-        console.error("Lỗi parse JSON:", parseErr, "Raw:", jsonStr);
-        throw new Error("AI trả về dữ liệu lỗi format.");
+        console.error("Lỗi Parse JSON:", parseErr, "Raw:", jsonStr);
+        throw new HttpsError('internal', "Lỗi định dạng dữ liệu từ AI.");
     }
 
   } catch (error) {
-    console.error("Function Error:", error.message);
-    
-    // Trả về object lỗi chuẩn để Client không bị lỗi "cannot be decoded"
-    // Lưu ý: Không gửi nguyên error object vì nó có thể chứa circular reference
-    return {
-        debug_error: true,
-        message: error.message,
-        details: error.response?.data ? JSON.stringify(error.response.data) : "No details"
-    };
+    console.error("CRITICAL ERROR:", error.message);
+    throw new HttpsError('internal', error.message);
   }
 });
