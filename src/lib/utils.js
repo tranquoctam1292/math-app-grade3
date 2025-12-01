@@ -1,4 +1,5 @@
 import { evaluate } from 'mathjs';
+import { TOPIC_TRANSLATIONS } from './constants';
 
 export const getDeviceId = () => {
     let deviceId = localStorage.getItem('math_app_device_id');
@@ -17,17 +18,13 @@ export const fmt = (num) => {
 
 export const solveSimpleExpression = (text) => {
     try {
-        // 1. Chuẩn hóa phép toán
         const clean = text.toLowerCase()
             .replace(/x/g, '*')
             .replace(/×/g, '*')
             .replace(/:/g, '/')
             .replace(/÷/g, '/');
 
-        // 2. Sử dụng thư viện mathjs để tính toán an toàn
-        // evaluate sẽ tự động xử lý thứ tự ưu tiên toán học
         const result = evaluate(clean);
-        
         return (isFinite(result) && !isNaN(result)) ? Math.round(result) : null; 
     } catch {
         return null;
@@ -58,7 +55,6 @@ export const solveComparison = (text) => {
             if (!clean) return null;
 
             try {
-                // Dùng mathjs thay vì new Function
                 return evaluate(clean);
             } catch {
                 return null;
@@ -80,4 +76,20 @@ export const solveComparison = (text) => {
 
 export const encodeEmail = (email) => {
     return btoa(email.toLowerCase().trim()).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+};
+
+// --- NEW: Hàm phân tích điểm yếu (Đã sửa lỗi biến unused) ---
+export const getWeakTopics = (stats) => {
+    if (!stats || !stats.topics) return [];
+    
+    // Lọc ra các chủ đề có tỷ lệ đúng < 50%
+    // Sử dụng _ cho biến key nếu không dùng, nhưng ở đây ta cần key để map
+    const weakList = Object.entries(stats.topics)
+        .filter(([, val]) => { // Bỏ qua 'key' ở đây vì chưa cần dùng trong filter
+            const rate = val.total > 0 ? (val.correct / val.total) : 1;
+            return rate < 0.5 && val.total >= 3;
+        })
+        .map(([key]) => TOPIC_TRANSLATIONS[key] || key); 
+
+    return weakList;
 };

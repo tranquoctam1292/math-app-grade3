@@ -35,9 +35,26 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
             <div className="flex-1 overflow-y-auto p-4 pb-32 no-scrollbar">
                 {/* Question Box */}
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-6">
-                    <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed">
+                    <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed mb-4">
                         <MathText text={q.text} />
                     </div>
+                    
+                    {/* --- SVG VISUALS (NEW) --- */}
+                    {q.svgContent && (
+                        <div className="mb-4 flex justify-center animation-fade-in">
+                            <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-inner">
+                                <svg 
+                                    width="100%" 
+                                    height="auto" 
+                                    viewBox="0 0 300 200" 
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="max-w-[280px] h-auto mx-auto"
+                                    dangerouslySetInnerHTML={{ __html: q.svgContent }}
+                                    style={{ minHeight: '120px' }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Options List */}
@@ -49,19 +66,15 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
 
                         if (isSubmitted) {
                             if (label === q.correctOption) {
-                                // ĐÁP ÁN ĐÚNG
                                 stateClass = "bg-green-100 border-green-600 text-green-800 ring-4 ring-green-200 scale-[1.02] shadow-xl";
                                 icon = <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-green-600 text-white border-green-700"><CheckCircle size={18}/></div>;
                             } else if (selectedOption === label) {
-                                // ĐÁP ÁN SAI (ĐÃ CHỌN)
                                 stateClass = "bg-red-100 border-red-600 text-red-800 ring-4 ring-red-200 animate-shake";
                                 icon = <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-red-600 text-white border-red-700"><XCircle size={18}/></div>;
                             } else {
-                                // CÁC ĐÁP ÁN KHÁC
                                 stateClass = "bg-slate-50 border-slate-100 text-slate-300 opacity-40 grayscale";
                             }
                         } else if (selectedOption === label) {
-                            // ĐANG CHỌN (CHƯA SUBMIT)
                             stateClass = "bg-blue-50 border-blue-500 text-blue-700";
                         }
 
