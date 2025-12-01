@@ -1,8 +1,15 @@
 import React from 'react';
-import { ArrowLeft, CheckCircle, XCircle, PiggyBank, Smile, Frown, ArrowRight, RotateCcw } from 'lucide-react';
+import { ArrowLeft, PiggyBank, Smile, Frown, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
 import { ClayButton, MathText } from '../lib/helpers';
 import { REWARD_PER_LEVEL } from '../lib/constants';
 import { fmt } from '../lib/utils';
+
+// Import các dạng bài tập mới
+import QuizMCQ from './quiz_types/QuizMCQ';
+import QuizFillBlank from './quiz_types/QuizFillBlank';
+import QuizComparison from './quiz_types/QuizComparison';
+import QuizSorting from './quiz_types/QuizSorting';
+import QuizMatching from './quiz_types/QuizMatching';
 
 const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion }) => {
     const q = quizData[currentQIndex];
@@ -10,8 +17,40 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
     
     if (!q) return <div className="p-6 text-center">Đang tải...</div>;
 
-    const isCorrect = selectedOption === q.correctOption;
+    // Logic kiểm tra đúng sai để hiển thị Modal kết quả
+    let isCorrect = false;
+    if (isSubmitted) {
+        if (q.type === 'sorting') {
+            isCorrect = JSON.stringify(selectedOption) === JSON.stringify(q.correctOrder);
+        } else if (q.type === 'matching') {
+            isCorrect = selectedOption === true;
+        } else if (q.type === 'fill_blank') {
+            isCorrect = String(selectedOption).trim() === String(q.correctVal).trim();
+        } else {
+            // MCQ & Comparison
+            isCorrect = String(selectedOption).trim() === String(q.correctVal).trim();
+        }
+    }
+
     const isLastQuestion = currentQIndex === quizData.length - 1;
+
+    // Helper render body
+    const renderQuizBody = () => {
+        // Thêm prop key={currentQIndex} vào TẤT CẢ các component bên dưới
+        switch (q.type) {
+            case 'fill_blank':
+                return <QuizFillBlank key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} userAnswer={selectedOption} />;
+            case 'comparison':
+                return <QuizComparison key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} userAnswer={selectedOption} />;
+            case 'sorting':
+                return <QuizSorting key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} />;
+            case 'matching':
+                return <QuizMatching key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} />;
+            case 'mcq':
+            default:
+                return <QuizMCQ key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} userAnswer={selectedOption} />;
+        }
+    };
 
     return (
         <div className="flex flex-col h-full bg-slate-50 relative overflow-hidden">
@@ -23,7 +62,10 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                     </ClayButton>
                     <div className="flex flex-col items-center">
                         <span className="font-black text-slate-700 text-lg">Câu {currentQIndex + 1}/{quizData.length}</span>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Mức {q.level} (+{REWARD_PER_LEVEL[q.level] || 0}đ)</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 uppercase tracking-wider">{q.type || 'MCQ'}</span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Mức {q.level} (+{REWARD_PER_LEVEL[q.level] || 0}đ)</span>
+                        </div>
                     </div>
                     <div className="flex items-center gap-1 bg-pink-100 px-2 py-1 rounded-lg text-pink-700 font-bold text-xs">
                         <PiggyBank size={14}/> +{fmt(sessionScore)}đ
@@ -35,68 +77,27 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
             </div>
 
             {/* --- SCROLLABLE CONTENT --- */}
-            <div className="flex-1 overflow-y-auto p-4 pb-10 no-scrollbar">
-                {/* Question Box */}
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-6">
-                    <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
-                        <MathText text={q.text} />
-                    </div>
-                    
-                    {/* --- SVG VISUALS --- */}
-                    {q.svgContent && (
-                        <div className="mt-4 flex justify-center animation-fade-in">
-                            <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-inner">
-                                <svg 
-                                    width="100%" 
-                                    height="auto" 
-                                    viewBox="0 0 300 200" 
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="max-w-[280px] h-auto mx-auto"
-                                    dangerouslySetInnerHTML={{ __html: q.svgContent }}
-                                    style={{ minHeight: '120px' }}
-                                />
-                            </div>
+            <div className="flex-1 overflow-y-auto p-4 pb-24 no-scrollbar flex flex-col">
+                {/* Question Box (Chỉ hiện text ở đây nếu ko phải FillBlank - vì FillBlank đã tích hợp text bên trong) */}
+                {q.type !== 'fill_blank' && (
+                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6 shrink-0">
+                        <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
+                            <MathText text={q.text} />
                         </div>
-                    )}
-                </div>
+                        {/* SVG Support */}
+                        {q.svgContent && (
+                            <div className="mt-4 flex justify-center animation-fade-in">
+                                <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-inner">
+                                    <svg width="100%" height="auto" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" className="max-w-[280px] h-auto mx-auto" dangerouslySetInnerHTML={{ __html: q.svgContent }} style={{ minHeight: '120px' }} />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
-                {/* Options List */}
-                <div className="space-y-3">
-                    {q.options.map((opt, idx) => {
-                        const label = ['A', 'B', 'C', 'D'][idx];
-                        let stateClass = "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"; 
-                        let icon = <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 bg-white border-current`}>{label}</div>;
-
-                        if (isSubmitted) {
-                            if (label === q.correctOption) {
-                                // ĐÁP ÁN ĐÚNG
-                                stateClass = "bg-green-100 border-green-600 text-green-800 ring-4 ring-green-200 scale-[1.02] shadow-xl";
-                                icon = <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-green-600 text-white border-green-700"><CheckCircle size={18}/></div>;
-                            } else if (selectedOption === label) {
-                                // ĐÁP ÁN SAI (ĐÃ CHỌN)
-                                stateClass = "bg-red-100 border-red-600 text-red-800 ring-4 ring-red-200 animate-shake opacity-60";
-                                icon = <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-red-600 text-white border-red-700"><XCircle size={18}/></div>;
-                            } else {
-                                // CÁC ĐÁP ÁN KHÁC (Làm mờ đi để tập trung)
-                                stateClass = "bg-slate-50 border-slate-100 text-slate-300 opacity-40 grayscale";
-                            }
-                        } else if (selectedOption === label) {
-                            // ĐANG CHỌN (CHƯA SUBMIT - Thực tế logic này ít chạy vì chọn là submit luôn)
-                            stateClass = "bg-blue-50 border-blue-500 text-blue-700";
-                        }
-
-                        return (
-                            <ClayButton 
-                                key={idx} 
-                                onClick={() => handleSelectOption(label)} 
-                                disabled={isSubmitted} 
-                                className={`w-full min-h-[72px] flex items-center px-4 gap-4 ${stateClass} border-2 transition-all duration-200`}
-                            >
-                                {icon}
-                                <span className="text-xl font-bold flex-1 text-left"><MathText text={opt} /></span>
-                            </ClayButton>
-                        )
-                    })}
+                {/* Render Dynamic Component */}
+                <div className="flex-1">
+                    {renderQuizBody()}
                 </div>
             </div>
 
@@ -123,12 +124,17 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                                 <div className="mb-4 text-center">
                                     <div className="text-xs font-bold text-slate-400 uppercase mb-1">Đáp án đúng là</div>
                                     <div className="text-xl font-black text-green-600 bg-green-50 py-2 rounded-xl border border-green-100">
-                                        {q.correctOption}
+                                        {q.type === 'sorting' 
+                                            ? q.correctOrder.join(' → ') 
+                                            : q.type === 'matching' 
+                                                ? 'Xem giải thích bên dưới'
+                                                : (q.correctOption || q.correctVal)
+                                        }
                                     </div>
                                 </div>
                             )}
                             
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-600 text-sm leading-relaxed font-medium">
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-600 text-sm leading-relaxed font-medium max-h-40 overflow-y-auto">
                                 <span className="font-bold text-indigo-500 block mb-1">💡 Giải thích:</span>
                                 <MathText text={q.explanation} />
                             </div>

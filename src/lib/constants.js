@@ -307,5 +307,57 @@ export const BACKUP_QUESTIONS = [
         "explanation": "30 : 6 = 5 (hộp).",
         "level": 2,
         "topic": "word_problems"
+    },
+    // 1. Mẫu Comparison
+    {
+        "type": "comparison",
+        "text": "So sánh: 5 x 5 ... 24",
+        "options": [">", "<", "="],
+        "correctVal": ">",
+        "explanation": "5 x 5 = 25. Vì 25 > 24 nên điền dấu >.",
+        "level": 2,
+        "topic": "arithmetic"
+    },
+    // 2. Mẫu Fill Blank
+    {
+        "type": "fill_blank",
+        "text": "Điền số thích hợp: 15 + __ = 30",
+        "correctVal": "15",
+        "explanation": "Muốn tìm số hạng chưa biết, ta lấy tổng trừ đi số hạng đã biết: 30 - 15 = 15.",
+        "level": 2,
+        "topic": "finding_x"
+    },
+    // 3. Mẫu Sorting
+    {
+        "type": "sorting",
+        "text": "Sắp xếp các số sau theo thứ tự từ bé đến lớn",
+        "items": ["105", "98", "150", "12"],
+        "correctOrder": ["12", "98", "105", "150"],
+        "explanation": "So sánh các số: 12 < 98 < 105 < 150.",
+        "level": 3,
+        "topic": "numbers_roman"
+    },
+    // 4. Mẫu Matching
+    {
+        "type": "matching",
+        "text": "Ghép phép tính với kết quả đúng",
+        "pairs": [
+            { "left": "2 x 3", "right": "6" },
+            { "left": "4 x 5", "right": "20" },
+            { "left": "10 : 2", "right": "5" }
+        ],
+        "explanation": "2x3=6; 4x5=20; 10:2=5",
+        "level": 2,
+        "topic": "arithmetic"
+    },
+    // ... Một vài câu MCQ cũ để fallback
+    {
+        "type": "mcq",
+        "text": "Tính: 100 - 45",
+        "options": ["55", "45", "65", "50"],
+        "correctVal": "55",
+        "explanation": "100 - 45 = 55.",
+        "level": 2,
+        "topic": "arithmetic"
     }
 ];

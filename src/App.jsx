@@ -283,101 +283,111 @@ const MathApp = () => {
   };
 
   // --- CORE AI LOGIC ---
-  const generateQuizQuestions = useCallback(async (isBackground = false) => {
-      if (!currentProfile) return null;
+// Tìm hàm generateQuizQuestions và thay thế nội dung bên trong:
+    const generateQuizQuestions = useCallback(async (isBackground = false) => {
+        if (!currentProfile) return null;
 
-      // 1. Phân tích điểm yếu
-      const currentStats = userStats[currentProfile.id] || {};
-      const weakTopics = getWeakTopics({ topics: currentStats.topics });
-      const personalizationInstruction = weakTopics.length > 0 
-        ? `Học sinh đang yếu: "${weakTopics.join(', ')}". Hãy tạo 4 câu thuộc các chủ đề này (mức độ dễ hơn chút).`
-        : `Học sinh học tốt. Hãy tăng cường câu đố tư duy logic.`;
+        // 1. Phân tích điểm yếu (Giữ nguyên logic cũ)
+        const currentStats = userStats[currentProfile.id] || {};
+        const weakTopics = getWeakTopics({ topics: currentStats.topics });
+        const personalizationInstruction = weakTopics.length > 0 
+        ? `Học sinh đang yếu: "${weakTopics.join(', ')}". Hãy ưu tiên tạo câu hỏi thuộc các chủ đề này.`
+        : `Học sinh học tốt. Hãy tăng cường câu đố tư duy logic và các dạng bài ghép thẻ/sắp xếp.`;
 
-      // 2. Setup Prompt
-      const randomSeed = Math.floor(Math.random() * 1000000); 
-      const dynamicConstraint = getRandomConstraints(); 
-      const levelCounts = DIFFICULTY_MIX[config.difficultyMode] || DIFFICULTY_MIX['medium'];
-      const topicIds = config.selectedTopics;
-      const topicLabels = TOPICS_LIST.filter(t => topicIds.includes(t.id)).map(t => t.label).join(", ");
-      const semesterDetail = SEMESTER_CONTENT[config.semester] || SEMESTER_CONTENT['hk2'];
-      const countsPrompt = Object.entries(levelCounts).map(([lvl, count]) => count > 0 ? `- Level ${lvl}: ${count} câu` : null).filter(Boolean).join('\n');
-      const themes = ["Đi chợ/Siêu thị", "Nông trại", "Trường học", "Thế giới động vật", "Thám hiểm vũ trụ", "Lễ hội trái cây", "Thể thao"];
-      const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+        // 2. Setup Prompt MỚI
+        const randomSeed = Math.floor(Math.random() * 1000000); 
+        const dynamicConstraint = getRandomConstraints(); 
+        const topicLabels = TOPICS_LIST.filter(t => config.selectedTopics.includes(t.id)).map(t => t.label).join(", ");
+        const themes = ["Siêu thị", "Nông trại", "Trường học", "Thám hiểm đại dương", "Vũ trụ", "Thế giới kẹo ngọt"];
+        const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
-      const aiPrompt = `
-        Mã phiên: ${randomSeed}. Vai trò: GV Toán lớp 3. Tạo 10 câu trắc nghiệm JSON.
+        const aiPrompt = `
+        Mã phiên: ${randomSeed}. Vai trò: GV Toán lớp 3. Tạo 10 câu hỏi JSON.
         BỐI CẢNH: ${config.semester === 'hk1' ? 'HK1' : 'HK2'}. Chủ đề: ${randomTheme}.
-        NỘI DUNG: ${semesterDetail} (Tập trung: ${topicLabels}).
-        CẤU HÌNH: ${countsPrompt}.
+        NỘI DUNG TẬP TRUNG: ${topicLabels}.
         YÊU CẦU CÁ NHÂN HÓA: ${personalizationInstruction}
         YÊU CẦU ĐẶC BIỆT: ${dynamicConstraint}
         
-        VISUALS (QUAN TRỌNG):
-        - Nếu là câu hỏi HÌNH HỌC, bắt buộc trả về trường "svgContent" chứa mã SVG (chỉ nội dung bên trong tag svg như <rect>, <path>...) để vẽ hình minh họa.
+        QUAN TRỌNG - HÃY TẠO ĐA DẠNG CÁC LOẠI CÂU HỎI SAU (Tỉ lệ ngẫu nhiên):
+        1. "mcq": Trắc nghiệm 4 đáp án (Chiếm khoảng 40%).
+        2. "fill_blank": Điền số vào chỗ trống. VD: "5 + __ = 10", correctVal: "5". (20%)
+        3. "comparison": So sánh. Options bắt buộc là [">", "<", "="]. (10%)
+        4. "sorting": Sắp xếp. Trả về mảng "items" và "correctOrder". VD: Sắp xếp từ bé đến lớn. (15%)
+        5. "matching": Ghép cặp. Trả về mảng "pairs" (left/right). VD: Phép tính và Kết quả. (15%)
 
-        OUTPUT JSON: [{"text": "...", "options": ["A", "B", "C", "D"], "correctVal": "...", "explanation": "...", "level": 1, "topic": "arithmetic", "svgContent": "..."}]
-      `;
+        VISUALS: Nếu là hình học, hãy cố gắng trả về "svgContent".
+        OUTPUT JSON THEO SCHEMA ĐÃ ĐỊNH NGHĨA.
+        `;
 
-      // Helper xử lý câu hỏi
-      const processQuestions = (questions) => {
-          return questions.map((q, idx) => {
-              let opts = q.options || [];
-              let correctVal = String(q.correctVal).trim();
-              
-              const verifiedExpression = solveSimpleExpression(q.text);
-              const verifiedComparison = solveComparison(q.text);
+        // Helper xử lý dữ liệu trả về (Cập nhật để xử lý đa dạng type)
+        const processQuestions = (questions) => {
+            return questions.map((q, idx) => {
+                // Xử lý mặc định
+                let processedQ = {
+                    ...q,
+                    id: idx,
+                    level: q.level || 2,
+                    topic: TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic',
+                    type: q.type || 'mcq' // Fallback type
+                };
 
-              if (verifiedExpression !== null && String(verifiedExpression) !== correctVal) correctVal = String(verifiedExpression);
-              else if (verifiedComparison !== null && verifiedComparison !== correctVal) correctVal = verifiedComparison;
+                // Logic riêng cho từng loại
+                if (processedQ.type === 'mcq' || processedQ.type === 'comparison') {
+                    let opts = q.options || [];
+                    let correctVal = String(q.correctVal).trim();
+                    
+                    // Logic verify phép tính (chỉ áp dụng nếu là biểu thức số học)
+                    const verifiedExpression = solveSimpleExpression(q.text);
+                    const verifiedComparison = solveComparison(q.text);
 
-              const optsString = opts.map(o => String(o).trim());
-              if (!optsString.includes(correctVal)) opts[0] = correctVal; 
-              
-              while(opts.length < 4) {
-                  const valMatch = correctVal.match(/(\d+)/);
-                  const baseVal = valMatch ? parseInt(valMatch[0]) : 50; 
-                  let fakeNum = baseVal + Math.floor(Math.random() * 20) - 10;
-                  if (fakeNum < 0) fakeNum = 0; 
-                  const fakeOption = String(fakeNum);
-                  if (!opts.includes(fakeOption)) opts.push(fakeOption);
-              }
+                    if (verifiedExpression !== null && String(verifiedExpression) !== correctVal) correctVal = String(verifiedExpression);
+                    else if (verifiedComparison !== null && verifiedComparison !== correctVal) correctVal = verifiedComparison;
 
-              opts = [...new Set(opts.map(o => String(o).trim()))].sort(() => Math.random() - 0.5);
-              
-              const labels = ['A', 'B', 'C', 'D'];
-              let correctIdx = opts.findIndex(o => o === correctVal);
-              if (correctIdx === -1) { correctIdx = 0; opts[0] = correctVal; }
-              
-              return { 
-                ...q, id: idx, options: opts, correctOption: labels[correctIdx], correctVal: correctVal, 
-                level: q.level || 2, 
-                topic: TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic',
-                svgContent: q.svgContent || null
-              };
-          });
-      };
+                    // Đảm bảo options đủ 4 (cho MCQ) hoặc 3 (cho Comparison)
+                    if (processedQ.type === 'comparison') {
+                        processedQ.options = ['>', '=', '<'];
+                    } else {
+                        // Logic tạo option giả cho MCQ (giữ nguyên logic cũ)
+                        const optsString = opts.map(o => String(o).trim());
+                        if (!optsString.includes(correctVal)) opts[0] = correctVal;
+                        while(opts.length < 4) {
+                            const valMatch = correctVal.match(/(\d+)/);
+                            const baseVal = valMatch ? parseInt(valMatch[0]) : 50; 
+                            let fakeNum = baseVal + Math.floor(Math.random() * 20) - 10;
+                            if (fakeNum < 0) fakeNum = 0; 
+                            const fakeOption = String(fakeNum);
+                            if (!opts.includes(fakeOption)) opts.push(fakeOption);
+                        }
+                        processedQ.options = [...new Set(opts)].sort(() => Math.random() - 0.5);
+                    }
+                    
+                    processedQ.correctVal = correctVal;
+                    // Mapping correctOption (A, B, C...) chỉ dùng cho MCQ hiển thị kiểu cũ, 
+                    // nhưng với logic mới ta sẽ so sánh trực tiếp value.
+                    // Tuy nhiên, giữ lại field này để tương thích ngược nếu cần.
+                    const labels = ['A', 'B', 'C', 'D'];
+                    let correctIdx = processedQ.options.findIndex(o => o === correctVal);
+                    processedQ.correctOption = labels[correctIdx] || 'A';
+                }
 
-      try {
-          const aiResult = await callGemini(aiPrompt);
-          if (aiResult && Array.isArray(aiResult) && aiResult.length > 0) {
-              return processQuestions(aiResult.slice(0, 10));
-          }
-          throw new Error("Dữ liệu AI rỗng");
-      } catch (e) {
-          console.warn(isBackground ? "Lỗi Preload:" : "Lỗi AI:", e);
-          if (isBackground) return null;
-          
-          const cacheKey = `math_quiz_cache_${config.difficultyMode}_${config.semester}_${config.selectedTopics.sort().join('_')}`;
-          const cachedData = localStorage.getItem(cacheKey);
-          if (cachedData) {
-              try {
-                  const parsed = JSON.parse(cachedData);
-                  if (parsed.data) return parsed.data;
-              } catch { /* Bỏ qua lỗi parse JSON */ }
-          }
-          return processQuestions([...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, 10));
-      }
-  }, [currentProfile, userStats, config]); 
+                return processedQ;
+            });
+        };
+
+        try {
+            const aiResult = await callGemini(aiPrompt);
+            if (aiResult && Array.isArray(aiResult) && aiResult.length > 0) {
+                return processQuestions(aiResult.slice(0, 10));
+            }
+            throw new Error("Dữ liệu AI rỗng");
+        } catch (e) {
+            console.warn(isBackground ? "Lỗi Preload:" : "Lỗi AI:", e);
+            if (isBackground) return null;
+            
+            // Fallback offline (Cần cập nhật BACKUP_QUESTIONS ở constants.js)
+            return processQuestions([...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, 10));
+        }
+    }, [currentProfile, userStats, config]);
 
   const handleStartQuiz = async () => {
       if (!currentProfile) { showNotification('error', "Vui lòng chọn hồ sơ!"); return; }
@@ -417,16 +427,51 @@ const MathApp = () => {
       }
   }, [gameState, currentProfile, generateQuizQuestions]); 
 
-  const handleSelectOption = (optLabel) => {
-      if (isSubmitted) return;
-      const timeTaken = Math.round((Date.now() - questionStartTime) / 1000);
-      setSelectedOption(optLabel); 
-      const currentQ = quizData[currentQIndex];
-      const isCorrect = optLabel === currentQ.correctOption;
-      let reward = 0;
-      if (isCorrect) { reward = REWARD_PER_LEVEL[currentQ.level] || 200; setSessionScore(prev => prev + reward); }
-      setHistory(prev => [...prev, { ...currentQ, userAnswer: optLabel, isCorrect, reward, timeTaken }]);
-      setIsSubmitted(true);
+  const handleSelectOption = (userAnswerData) => {
+    if (isSubmitted) return;
+    const timeTaken = Math.round((Date.now() - questionStartTime) / 1000);
+    
+    // Lưu tạm câu trả lời để hiển thị (format string nếu là object)
+    let displayAnswer = userAnswerData;
+    if (typeof userAnswerData === 'object') {
+        displayAnswer = JSON.stringify(userAnswerData);
+    }
+    setSelectedOption(displayAnswer); 
+
+    const currentQ = quizData[currentQIndex];
+    let isCorrect = false;
+
+    // --- LOGIC CHECK ĐÁP ÁN MỚI ---
+    if (currentQ.type === 'sorting') {
+        // userAnswerData là mảng các item đã sắp xếp
+        // So sánh JSON string của 2 mảng
+        isCorrect = JSON.stringify(userAnswerData) === JSON.stringify(currentQ.correctOrder);
+    } else if (currentQ.type === 'matching') {
+        // Với matching, component con sẽ trả về true/false khi hoàn thành game
+        isCorrect = userAnswerData === true; 
+    } else if (currentQ.type === 'fill_blank') {
+        // So sánh chuỗi, bỏ qua khoảng trắng
+        isCorrect = String(userAnswerData).trim() === String(currentQ.correctVal).trim();
+    } else {
+        // MCQ & Comparison & Fallback
+        // So sánh giá trị (Value) thay vì Label (A,B,C) để chính xác hơn
+        isCorrect = String(userAnswerData).trim() === String(currentQ.correctVal).trim();
+    }
+
+    let reward = 0;
+    if (isCorrect) { 
+        reward = REWARD_PER_LEVEL[currentQ.level] || 200; 
+        setSessionScore(prev => prev + reward); 
+    }
+    
+    setHistory(prev => [...prev, { 
+        ...currentQ, 
+        userAnswer: displayAnswer, 
+        isCorrect, 
+        reward, 
+        timeTaken 
+    }]);
+    setIsSubmitted(true);
   };
 
   const handleNextQuestion = () => {
