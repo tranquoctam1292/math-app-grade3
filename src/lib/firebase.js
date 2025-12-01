@@ -1,4 +1,3 @@
-// src/lib/firebase.js
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
@@ -31,6 +30,5 @@ try {
 }
 
 // Export ở cấp cao nhất (Top-level)
-export { db, auth, appId };
-
-//Trần Quốc Tâm đã ở đây
+// QUAN TRỌNG: Phải có 'app' ở đây để gemini.js sử dụng
+export { db, auth, appId, app };

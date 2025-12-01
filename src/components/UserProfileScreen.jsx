@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { UserCog, XCircle, CheckCircle, AlertTriangle, User, Mail, Save, Key, RefreshCw, Loader, ShieldCheck } from 'lucide-react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../lib/firebase';
+import { updateProfile, updatePassword } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { ClayButton } from '../lib/helpers';
-import { encodeEmail } from '../lib/utils';
 
 const UserProfileScreen = ({ appUser, setAppUser, setGameState }) => {
     const [displayName, setDisplayName] = useState(appUser.displayName || '');
@@ -16,15 +15,17 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState }) => {
     const handleUpdateProfile = async () => {
         setLoading(true); setMessage(null); setError(null);
         try {
-            const accountId = encodeEmail(appUser.email);
-            const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
-            await updateDoc(accountRef, { displayName: displayName });
-            
-            const updatedUser = { ...appUser, displayName };
-            setAppUser(updatedUser);
-            localStorage.setItem('math_app_user_session', JSON.stringify(updatedUser));
-            
-            setMessage("Đã cập nhật tên hiển thị!");
+            if (auth.currentUser) {
+                await updateProfile(auth.currentUser, { displayName: displayName });
+                
+                const updatedUser = { ...appUser, displayName };
+                setAppUser(updatedUser);
+                localStorage.setItem('math_app_user_session', JSON.stringify(updatedUser));
+                
+                setMessage("Đã cập nhật tên hiển thị!");
+            } else {
+                setError("Không tìm thấy người dùng đăng nhập.");
+            }
         } catch (e) {
             setError("Lỗi cập nhật: " + e.message);
         }
@@ -38,13 +39,20 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState }) => {
 
         setLoading(true); setMessage(null); setError(null);
         try {
-            const accountId = encodeEmail(appUser.email);
-            const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
-            await updateDoc(accountRef, { password: newPassword });
-            setMessage("Đổi mật khẩu thành công!");
-            setNewPassword(''); setConfirmPassword('');
+            if (auth.currentUser) {
+                await updatePassword(auth.currentUser, newPassword);
+                setMessage("Đổi mật khẩu thành công!");
+                setNewPassword(''); setConfirmPassword('');
+            } else {
+                setError("Vui lòng đăng nhập lại để thực hiện thao tác này.");
+            }
         } catch (e) {
-            setError("Lỗi: " + e.message);
+            // Firebase yêu cầu đăng nhập lại nếu phiên quá cũ
+            if (e.code === 'auth/requires-recent-login') {
+                setError("Để bảo mật, vui lòng đăng xuất và đăng nhập lại trước khi đổi mật khẩu.");
+            } else {
+                setError("Lỗi: " + e.message);
+            }
         }
         setLoading(false);
     };
@@ -89,14 +97,6 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState }) => {
                         <ClayButton onClick={handleChangePassword} disabled={loading} colorClass="bg-slate-800 text-white" className="w-full h-12 flex items-center justify-center gap-2 font-bold !rounded-xl">
                             {loading ? <Loader size={20} className="animate-spin"/> : <RefreshCw size={20}/>} Cập nhật mật khẩu
                         </ClayButton>
-                    </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-medium leading-relaxed flex items-start gap-3">
-                    <ShieldCheck size={24} className="flex-none"/>
-                    <div>
-                        <strong className="block mb-1 text-sm">Bảo mật thiết bị</strong>
-                        Tài khoản này được bảo vệ bởi tính năng giới hạn thiết bị. Hiện tại bạn đang đăng nhập hợp lệ trên thiết bị này.
                     </div>
                 </div>
             </div>

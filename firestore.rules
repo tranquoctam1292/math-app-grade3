@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Hàm kiểm tra người dùng đã đăng nhập chưa
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Hàm kiểm tra người dùng có phải chủ sở hữu document không
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Rule cho collection dữ liệu người dùng
+    match /artifacts/{appId}/public/data/math_user_data/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Chặn truy cập vào collection tài khoản cũ (math_accounts) vì không dùng nữa
+    match /artifacts/{appId}/public/data/math_accounts/{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Mặc định chặn tất cả
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

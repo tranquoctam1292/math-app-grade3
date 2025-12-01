@@ -1,61 +1,63 @@
 import React, { useState } from 'react';
 import { Mail, Key, UserPlus, LogIn, AlertTriangle, Loader, ShieldCheck, UserCheck } from 'lucide-react';
 import { ClayButton } from '../lib/helpers.jsx';
-import { getDeviceId, encodeEmail } from '../lib/utils.js';
-import { signInAnonymously } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, auth, appId } from '../lib/firebase'; // Import from App.jsx
+import { getDeviceId } from '../lib/utils.js';
+import { 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword, 
+    updateProfile, 
+    signInAnonymously 
+} from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
     const [isRegister, setIsRegister] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [displayName, setDisplayName] = useState(''); // Thêm tên hiển thị khi đăng ký
     const [loading, setLoading] = useState(false);
 
     const handleAuth = async () => {
-        if (!email || !password) { setErrorMsg("Vui lòng nhập đầy đủ thông tin"); return; }
+        if (!email || !password) { setErrorMsg("Vui lòng nhập email và mật khẩu"); return; }
         if (password.length < 6) { setErrorMsg("Mật khẩu phải từ 6 ký tự trở lên"); return; }
+        if (isRegister && !displayName) { setErrorMsg("Vui lòng nhập tên hiển thị"); return; }
         
         setLoading(true);
         setErrorMsg(null);
         try {
-            const cleanEmail = email.toLowerCase().trim();
-            const accountId = encodeEmail(cleanEmail);
-            // Sử dụng collection chung để xác thực tài khoản phụ huynh
-            const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
-            const accountSnap = await getDoc(accountRef);
-
+            let userCredential;
             if (isRegister) {
-                if (accountSnap.exists()) {
-                    setErrorMsg("Email này đã được đăng ký!");
-                } else {
-                    const newUid = crypto.randomUUID();
-                    const newAccount = {
-                        email: cleanEmail,
-                        password: password,
-                        uid: newUid,
-                        displayName: 'Phụ Huynh',
-                        devices: [getDeviceId()], 
-                        createdAt: Date.now()
-                    };
-                    await setDoc(accountRef, newAccount);
-                    await onLoginSuccess(newAccount); // Đăng ký thành công -> đăng nhập
-                }
+                // Đăng ký mới
+                userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                // Cập nhật tên hiển thị ngay sau khi tạo
+                await updateProfile(userCredential.user, {
+                    displayName: displayName
+                });
             } else {
-                if (!accountSnap.exists()) {
-                    setErrorMsg("Tài khoản không tồn tại!");
-                } else {
-                    const data = accountSnap.data();
-                    if (data.password === password) {
-                        await onLoginSuccess(data); // Đăng nhập thành công
-                    } else {
-                        setErrorMsg("Sai mật khẩu!");
-                    }
-                }
+                // Đăng nhập
+                userCredential = await signInWithEmailAndPassword(auth, email, password);
             }
+
+            const user = userCredential.user;
+            // Chuẩn hóa object user để trả về App.jsx
+            const appUser = {
+                email: user.email,
+                uid: user.uid,
+                displayName: user.displayName || displayName || 'Phụ Huynh',
+                devices: [getDeviceId()], 
+                createdAt: user.metadata.creationTime,
+                isAnon: false
+            };
+            
+            await onLoginSuccess(appUser);
+
         } catch (e) {
             console.error(e);
-            setErrorMsg("Lỗi kết nối. Vui lòng thử lại: " + e.message);
+            let msg = "Lỗi kết nối: " + e.message;
+            if (e.code === 'auth/email-already-in-use') msg = "Email này đã được đăng ký!";
+            if (e.code === 'auth/invalid-email') msg = "Email không hợp lệ!";
+            if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') msg = "Sai email hoặc mật khẩu!";
+            setErrorMsg(msg);
         } finally {
             setLoading(false);
         }
@@ -65,13 +67,10 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
         setLoading(true);
         setErrorMsg(null);
         try {
-            // Sử dụng signInAnonymously từ Firebase
-            await signInAnonymously(auth);
-            // Tạo tài khoản ảo cho người dùng ẩn danh (không cần email/pass)
+            const result = await signInAnonymously(auth);
             const anonUser = {
                 email: "anon@temp.com",
-                password: "temp",
-                uid: auth.currentUser.uid,
+                uid: result.user.uid,
                 displayName: 'Khách',
                 devices: [getDeviceId()], 
                 createdAt: Date.now(),
@@ -89,7 +88,7 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
         <div className="flex flex-col h-full bg-slate-50 p-6 justify-center">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 text-center">
                 <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-inner">🔐</div>
-                <h1 className="text-3xl font-black text-slate-800 mb-2">{isRegister ? 'Tạo Tài Khoản' : 'Chào Mừng'}</h1>
+                <h1 className="text-3xl font-black text-slate-800 mb-2">{isRegister ? 'Tạo Tài Khoản' : 'Đăng Nhập'}</h1>
                 <p className="text-slate-400 font-medium mb-8 text-sm">Phụ huynh đăng nhập để đồng bộ kết quả học tập cho bé.</p>
 
                 {errorMsg && (
@@ -99,6 +98,12 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 )}
 
                 <div className="space-y-4 mb-6">
+                    {isRegister && (
+                        <div className="relative">
+                            <UserPlus className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
+                            <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Tên hiển thị (VD: Bố Tuấn)" className="w-full h-14 pl-12 pr-4 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700 transition-all"/>
+                        </div>
+                    )}
                     <div className="relative">
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email phụ huynh" className="w-full h-14 pl-12 pr-4 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none font-bold text-slate-700 transition-all"/>
@@ -121,13 +126,13 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 <div className="text-xs text-slate-400 font-medium mb-3">HOẶC</div>
                 <ClayButton onClick={handleAnonLogin} disabled={loading} colorClass="bg-slate-200 text-slate-700" className="w-full h-12 flex items-center justify-center gap-2 font-bold text-sm">
                     {loading ? <Loader className="animate-spin"/> : <UserCheck/>}
-                    Sử dụng tạm thời (Không lưu đồng bộ)
+                    Dùng thử (Không lưu dữ liệu lâu dài)
                 </ClayButton>
             </div>
             
             <div className="mt-8 text-center">
                 <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-full text-xs font-bold border border-green-200">
-                    <ShieldCheck size={14}/> Bảo mật tối đa • Sync 3 thiết bị
+                    <ShieldCheck size={14}/> Bảo mật bởi Google Firebase
                 </div>
             </div>
         </div>
