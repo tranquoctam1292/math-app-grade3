@@ -1,76 +1,93 @@
 const { onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
-const fetch = require("node-fetch");
+// Lưu ý: Nếu axios chưa cài được thì dòng này sẽ gây crash.
+// Hãy chắc chắn đã chạy npm install axios trong thư mục functions
+const axios = require("axios");
 
 const apiKey = defineSecret("GEMINI_API_KEY");
 
-exports.generateQuestions = onCall({ secrets: [apiKey] }, async (request) => {
-  const prompt = request.data.prompt;
-
-  if (!prompt) {
-    throw new Error("Missing prompt");
-  }
-
-  const GEMINI_API_KEY = apiKey.value();
-  const MODEL_NAME = "gemini-2.0-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
-
-  // --- CẬP NHẬT SCHEMA MỚI ---
-  const responseSchema = {
-    type: "ARRAY",
-    items: {
-      type: "OBJECT",
-      properties: {
-        // Thêm trường type để định danh loại câu hỏi
-        type: { type: "STRING", enum: ["mcq", "fill_blank", "comparison", "matching", "sorting"] },
-        text: { type: "STRING" },
-        // Các trường tùy chọn (Optional) tùy theo loại câu hỏi
-        options: { type: "ARRAY", items: { type: "STRING" } }, // Dùng cho MCQ, Comparison
-        correctVal: { type: "STRING" }, // Dùng cho MCQ, Fill Blank, Comparison
-        items: { type: "ARRAY", items: { type: "STRING" } }, // Dùng cho Sorting
-        correctOrder: { type: "ARRAY", items: { type: "STRING" } }, // Dùng cho Sorting (Đáp án)
-        pairs: { // Dùng cho Matching
-          type: "ARRAY", 
-          items: { 
-            type: "OBJECT", 
-            properties: { left: {type: "STRING"}, right: {type: "STRING"} }
-          } 
-        },
-        explanation: { type: "STRING" },
-        level: { type: "NUMBER" },
-        topic: { type: "STRING" },
-        svgContent: { type: "STRING" } // Hỗ trợ vẽ hình học sau này
-      },
-      required: ["text", "type", "explanation", "level", "topic"]
-    }
-  };
-
-  const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.2, // Tăng nhẹ để AI sáng tạo hơn trong việc tạo đề
-      responseSchema: responseSchema
-    }
-  };
-
+exports.generateQuestions = onCall({ 
+  secrets: [apiKey],
+  timeoutSeconds: 120,
+  memory: "512MiB",
+  region: "us-central1"
+}, async (request) => {
+  // --- DEBUG MODE: Bắt toàn bộ lỗi để trả về Client ---
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+    console.log("--- START FUNCTION ---");
+
+    const prompt = request.data.prompt;
+    if (!prompt) throw new Error("Client không gửi prompt lên.");
+
+    const GEMINI_API_KEY = apiKey.value();
+    if (!GEMINI_API_KEY) throw new Error("Chưa set Secret GEMINI_API_KEY trên Firebase.");
+
+    const MODEL_NAME = "gemini-2.0-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const responseSchema = {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          type: { type: "STRING", enum: ["mcq", "fill_blank", "comparison", "matching", "sorting"] },
+          text: { type: "STRING" },
+          options: { type: "ARRAY", items: { type: "STRING" } },
+          correctVal: { type: "STRING" },
+          items: { type: "ARRAY", items: { type: "STRING" } },
+          correctOrder: { type: "ARRAY", items: { type: "STRING" } },
+          pairs: { type: "ARRAY", items: { type: "OBJECT", properties: { left: {type: "STRING"}, right: {type: "STRING"} } } },
+          explanation: { type: "STRING" },
+          level: { type: "NUMBER" },
+          topic: { type: "STRING" },
+          svgContent: { type: "STRING" }
+        },
+        required: ["text", "type", "explanation", "level", "topic"]
+      }
+    };
+
+    const payload = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.4,
+        responseSchema: responseSchema
+      }
+    };
+
+    // Gọi Gemini
+    const response = await axios.post(url, payload, {
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    if (!response.ok) {
-      throw new Error(`Gemini API Error: ${response.statusText}`);
+    const data = response.data;
+    if (!data.candidates || !data.candidates[0].content) {
+      return { debug_error: true, message: "Gemini trả về data rỗng", raw: data };
     }
 
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    let text = data.candidates[0].content.parts[0].text;
     
-    return JSON.parse(text);
+    // Làm sạch JSON
+    text = text.trim();
+    if (text.startsWith("```json")) text = text.replace(/^```json/, "").replace(/```$/, "");
+    else if (text.startsWith("```")) text = text.replace(/^```/, "").replace(/```$/, "");
+
+    try {
+      const result = JSON.parse(text);
+      return result; // Thành công!
+    } catch (parseErr) {
+      return { debug_error: true, message: "Lỗi Parse JSON", raw_text: text };
+    }
+
   } catch (error) {
-    console.error("Cloud Function Error:", error);
-    throw new Error("Failed to generate questions.");
+    // TRẢ LỖI VỀ CLIENT ĐỂ ĐỌC (Thay vì crash 500)
+    console.error("CRITICAL ERROR:", error);
+    return {
+      debug_error: true,
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      axios_response: error.response ? error.response.data : "No Response Data"
+    };
   }
 });

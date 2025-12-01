@@ -2,34 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Hàm kiểm tra người dùng đã đăng nhập chưa
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    // Hàm kiểm tra người dùng có phải chủ sở hữu document không
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Rule cho collection dữ liệu người dùng (Giữ nguyên)
+    // Cho phép bất kỳ ai đã đăng nhập (bao gồm Ẩn danh) được đọc/ghi
+    // Điều này giúp tránh lỗi permission trong quá trình dev
     match /artifacts/{appId}/public/data/math_user_data/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // --- RULE MỚI CHO GÓP Ý (FEEDBACK) ---
-    // Cho phép bất kỳ ai đã đăng nhập (kể cả ẩn danh) được TẠO feedback
-    // Nhưng KHÔNG cho phép đọc, sửa, xóa (Bảo mật thông tin người gửi)
+    // Rule cho feedback (giữ nguyên)
     match /artifacts/{appId}/public/data/app_feedbacks/{document=**} {
-      allow create: if request.auth != null; 
-    }
-
-    // Chặn truy cập vào collection tài khoản cũ
-    match /artifacts/{appId}/public/data/math_accounts/{document=**} {
-      allow read, write: if false;
+      allow create: if request.auth != null;
     }
     
-    // Mặc định chặn tất cả các truy cập khác để bảo mật
+    // Mặc định chặn các truy cập lạ khác
     match /{document=**} {
       allow read, write: if false;
     }
