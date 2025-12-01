@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'; // Thêm useCallback
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   CheckCircle, XCircle, ArrowRight, ArrowLeft,
   Loader, WifiOff, AlertTriangle
@@ -122,25 +122,40 @@ const MathApp = () => {
       showNotification('success', `Chào mừng ${userAccount.displayName || 'Bạn'} quay lại!`);
   };
 
+  // --- FIX LỖI LOGOUT ---
   const handleAppLogout = async (resetAuth = false) => {
+      // Logic xử lý đăng xuất bắt buộc hoặc tài khoản ẩn danh
       if (resetAuth || (appUser && appUser.isAnon)) {
-          try { await signOut(auth); } catch { /* Bỏ qua lỗi logout */ }
+          // 1. Hiển thị loading TRƯỚC
           setIsLoading(true);
+          
+          try { 
+              await signOut(auth); 
+          } catch(e) { 
+              console.warn("Lỗi sign out:", e);
+          }
+          
+          // 2. Clear toàn bộ state
           setAppUser(null);
           setProfiles([]);
           setCurrentProfile(null);
           setUserStats({});
           setPreloadedQuiz(null);
           localStorage.removeItem('math_app_user_session');
+          
+          // 3. Chuyển màn hình & TẮT LOADING (Quan trọng)
           setGameState('auth');
+          setIsLoading(false); 
           showNotification('success', 'Đã đăng xuất thành công.');
       } else {
+        // Logic đăng xuất người dùng thường
         if (window.confirm("Bạn có chắc chắn muốn đăng xuất không?")) {
             setAppUser(null);
             setProfiles([]);
             setCurrentProfile(null);
             setUserStats({});
             localStorage.removeItem('math_app_user_session');
+            
             setGameState('auth');
             showNotification('success', 'Đã đăng xuất.');
         }
@@ -267,7 +282,7 @@ const MathApp = () => {
       setGameState('home');
   };
 
-  // --- CORE AI LOGIC (Sử dụng useCallback để sửa lỗi useEffect dependency) ---
+  // --- CORE AI LOGIC ---
   const generateQuizQuestions = useCallback(async (isBackground = false) => {
       if (!currentProfile) return null;
 
@@ -362,7 +377,7 @@ const MathApp = () => {
           }
           return processQuestions([...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, 10));
       }
-  }, [currentProfile, userStats, config]); // Dependencies của useCallback
+  }, [currentProfile, userStats, config]); 
 
   const handleStartQuiz = async () => {
       if (!currentProfile) { showNotification('error', "Vui lòng chọn hồ sơ!"); return; }
@@ -400,7 +415,7 @@ const MathApp = () => {
           };
           preload();
       }
-  }, [gameState, currentProfile, generateQuizQuestions]); // Thêm generateQuizQuestions vào deps
+  }, [gameState, currentProfile, generateQuizQuestions]); 
 
   const handleSelectOption = (optLabel) => {
       if (isSubmitted) return;
@@ -508,7 +523,6 @@ const MathApp = () => {
     <>
     <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800;900&display=swap'); body { font-family: 'Nunito', sans-serif; } .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .animation-fade-in { animation: fadeIn 0.3s ease-out forwards; } @keyframes spin { 100% { transform: rotate(360deg); } } @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } } .animate-shake { animation: shake 0.5s ease-in-out; }`}</style>
     <div className="fixed inset-0 bg-slate-100 flex items-center justify-center select-none overflow-hidden">
-      {/* SỬA LỖI: Xóa class 'relative' thừa */}
       <div className="w-full h-full max-w-md bg-white shadow-2xl overflow-hidden relative flex flex-col sm:rounded-[2.5rem] sm:h-[95vh] sm:border-[8px] sm:border-slate-200">
         <React.Suspense fallback={<div className="flex items-center justify-center h-full"><Loader className="animate-spin text-indigo-500"/></div>}>{getScreenComponent()}</React.Suspense>
         
