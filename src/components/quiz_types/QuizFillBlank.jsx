@@ -9,7 +9,7 @@ const QuizFillBlank = ({ question, onAnswer, isSubmitted, userAnswer }) => {
         if (isSubmitted) return;
         if (val === 'DEL') setInput(prev => prev.slice(0, -1));
         else if (val === 'OK') {
-            if (input.length > 0) onAnswer(input);
+            if (input.length > 0) onAnswer(input.trim());
         }
         else setInput(prev => (prev.length < 5 ? prev + val : prev));
     };

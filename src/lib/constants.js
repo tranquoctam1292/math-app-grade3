@@ -58,9 +58,11 @@ export const SHOP_ITEMS = [
 
 export const AVATARS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮'];
 
+// Cập nhật: Làm sạch dữ liệu số (loại bỏ đơn vị, dấu phẩy) để khớp logic normalizeVal
 export const BACKUP_QUESTIONS = [
     // --- ARITHMETIC (Tính toán) ---
     {
+        "type": "mcq",
         "text": "Tính nhẩm: 450 + 200 - 50",
         "options": ["600", "550", "650", "500"],
         "correctVal": "600",
@@ -69,6 +71,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "arithmetic"
     },
     {
+        "type": "mcq",
         "text": "Kết quả của phép nhân: 12 × 5",
         "options": ["60", "50", "55", "70"],
         "correctVal": "60",
@@ -77,6 +80,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "arithmetic"
     },
     {
+        "type": "mcq",
         "text": "Tìm số lớn nhất trong các số sau: 8790, 8970, 8079, 8709",
         "options": ["8970", "8790", "8079", "8709"],
         "correctVal": "8970",
@@ -87,6 +91,7 @@ export const BACKUP_QUESTIONS = [
 
     // --- EXPRESSIONS (Biểu thức) ---
     {
+        "type": "mcq",
         "text": "Tính giá trị biểu thức: 20 + 5 × 2",
         "options": ["30", "50", "27", "40"],
         "correctVal": "30",
@@ -95,6 +100,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "expressions"
     },
     {
+        "type": "mcq",
         "text": "Tính: (100 - 40) : 2",
         "options": ["30", "20", "60", "80"],
         "correctVal": "30",
@@ -105,6 +111,7 @@ export const BACKUP_QUESTIONS = [
 
     // --- FINDING X (Tìm X) ---
     {
+        "type": "mcq",
         "text": "Tìm x, biết: x - 125 = 300",
         "options": ["425", "175", "275", "400"],
         "correctVal": "425",
@@ -113,6 +120,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "finding_x"
     },
     {
+        "type": "mcq",
         "text": "Tìm x, biết: x : 6 = 14",
         "options": ["84", "20", "60", "74"],
         "correctVal": "84",
@@ -121,6 +129,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "finding_x"
     },
     {
+        "type": "mcq",
         "text": "Tìm y, biết: 5 × y = 35",
         "options": ["7", "6", "8", "9"],
         "correctVal": "7",
@@ -129,53 +138,59 @@ export const BACKUP_QUESTIONS = [
         "topic": "finding_x"
     },
 
-    // --- WORD PROBLEMS (Toán đố) ---
+    // --- WORD PROBLEMS (Toán đố) - Đã bỏ đơn vị trong correctVal/options ---
     {
+        "type": "mcq",
         "text": "Cô giáo có 40 quyển vở, chia đều cho 5 bạn giỏi nhất lớp. Hỏi mỗi bạn nhận được bao nhiêu quyển?",
-        "options": ["8 quyển", "7 quyển", "9 quyển", "6 quyển"],
-        "correctVal": "8 quyển",
+        "options": ["8", "7", "9", "6"],
+        "correctVal": "8",
         "explanation": "Lấy tổng số vở chia cho số bạn: 40 : 5 = 8 (quyển).",
         "level": 2,
         "topic": "word_problems"
     },
     {
+        "type": "mcq",
         "text": "Một trang trại có 120 con gà và số vịt nhiều gấp đôi số gà. Hỏi trang trại có bao nhiêu con vịt?",
-        "options": ["240 con", "120 con", "360 con", "60 con"],
-        "correctVal": "240 con",
+        "options": ["240", "120", "360", "60"],
+        "correctVal": "240",
         "explanation": "Số vịt gấp đôi số gà: 120 × 2 = 240 (con).",
         "level": 3,
         "topic": "word_problems"
     },
     {
+        "type": "mcq",
         "text": "Mẹ mua 5kg gạo, giá mỗi cân là 20.000 đồng. Mẹ đưa cô bán hàng 200.000 đồng. Hỏi cô bán hàng phải trả lại bao nhiêu?",
-        "options": ["100.000 đồng", "120.000 đồng", "90.000 đồng", "80.000 đồng"],
-        "correctVal": "100.000 đồng",
+        "options": ["100000", "120000", "90000", "80000"],
+        "correctVal": "100000",
         "explanation": "Tiền gạo: 5 x 20.000 = 100.000đ. Tiền thừa: 200.000 - 100.000 = 100.000đ.",
         "level": 4,
         "topic": "word_problems"
     },
 
-    // --- GEOMETRY (Hình học) ---
+    // --- GEOMETRY (Hình học) - Đã bỏ đơn vị ---
     {
-        "text": "Một hình vuông có cạnh 5cm. Chu vi hình vuông đó là:",
-        "options": ["20cm", "25cm", "15cm", "10cm"],
-        "correctVal": "20cm",
+        "type": "mcq",
+        "text": "Một hình vuông có cạnh 5cm. Chu vi hình vuông đó là (đơn vị cm):",
+        "options": ["20", "25", "15", "10"],
+        "correctVal": "20",
         "explanation": "Chu vi hình vuông = cạnh × 4 = 5 × 4 = 20 (cm).",
         "level": 2,
         "topic": "geometry"
     },
     {
-        "text": "Một hình chữ nhật có chiều dài 10cm, chiều rộng 4cm. Diện tích hình chữ nhật là:",
-        "options": ["40cm²", "28cm²", "14cm²", "40cm"],
-        "correctVal": "40cm²",
+        "type": "mcq",
+        "text": "Một hình chữ nhật có chiều dài 10cm, chiều rộng 4cm. Diện tích hình chữ nhật là (cm²):",
+        "options": ["40", "28", "14", "400"],
+        "correctVal": "40",
         "explanation": "Diện tích hình chữ nhật = Dài × Rộng = 10 × 4 = 40 (cm²).",
         "level": 3,
         "topic": "geometry"
     },
     {
+        "type": "mcq",
         "text": "Góc vuông là góc có số đo bằng bao nhiêu độ?",
-        "options": ["90 độ", "60 độ", "180 độ", "45 độ"],
-        "correctVal": "90 độ",
+        "options": ["90", "60", "180", "45"],
+        "correctVal": "90",
         "explanation": "Góc vuông có số đo bằng 90 độ (ký hiệu 90°).",
         "level": 2,
         "topic": "geometry"
@@ -183,6 +198,7 @@ export const BACKUP_QUESTIONS = [
 
     // --- FRACTIONS (Phân số) ---
     {
+        "type": "mcq",
         "text": "Một cái bánh chia làm 4 phần bằng nhau, bé ăn hết 1 phần. Bé đã ăn bao nhiêu phần cái bánh?",
         "options": ["1/4", "1/2", "3/4", "1/3"],
         "correctVal": "1/4",
@@ -191,9 +207,10 @@ export const BACKUP_QUESTIONS = [
         "topic": "fractions"
     },
     {
+        "type": "mcq",
         "text": "Biết 1/3 số học sinh của lớp là 10 bạn. Hỏi lớp đó có tất cả bao nhiêu học sinh?",
-        "options": ["30 bạn", "20 bạn", "40 bạn", "13 bạn"],
-        "correctVal": "30 bạn",
+        "options": ["30", "20", "40", "13"],
+        "correctVal": "30",
         "explanation": "Tổng số học sinh = 10 × 3 = 30 (bạn).",
         "level": 3,
         "topic": "fractions"
@@ -201,6 +218,7 @@ export const BACKUP_QUESTIONS = [
 
     // --- MONEY & UNITS (Đo lường & Tiền) ---
     {
+        "type": "mcq",
         "text": "Đổi đơn vị: 2kg = ... g",
         "options": ["2000", "200", "20", "20000"],
         "correctVal": "2000",
@@ -209,6 +227,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "money_units"
     },
     {
+        "type": "mcq",
         "text": "Bây giờ là 8 giờ 15 phút. 30 phút nữa là mấy giờ?",
         "options": ["8 giờ 45 phút", "9 giờ", "8 giờ 30 phút", "9 giờ 15 phút"],
         "correctVal": "8 giờ 45 phút",
@@ -217,9 +236,10 @@ export const BACKUP_QUESTIONS = [
         "topic": "money_units"
     },
     {
+        "type": "mcq",
         "text": "5m 4cm bằng bao nhiêu cm?",
-        "options": ["504cm", "540cm", "54cm", "5004cm"],
-        "correctVal": "504cm",
+        "options": ["504", "540", "54", "5004"],
+        "correctVal": "504",
         "explanation": "5m = 500cm. Vậy 5m 4cm = 500 + 4 = 504cm.",
         "level": 3,
         "topic": "money_units"
@@ -227,6 +247,7 @@ export const BACKUP_QUESTIONS = [
 
     // --- ROMAN NUMERALS & STATISTICS (Số La Mã & Thống kê) ---
     {
+        "type": "mcq",
         "text": "Số 15 viết dưới dạng số La Mã là:",
         "options": ["XV", "XIV", "XVI", "VX"],
         "correctVal": "XV",
@@ -235,14 +256,16 @@ export const BACKUP_QUESTIONS = [
         "topic": "numbers_roman"
     },
     {
-        "text": "Số liền trước của số 10.000 là số nào?",
+        "type": "mcq",
+        "text": "Số liền trước của số 10.000 là số nào? (Bỏ dấu chấm)",
         "options": ["9999", "9990", "9000", "10001"],
         "correctVal": "9999",
-        "explanation": "Muốn tìm số liền trước, ta lấy số đó trừ đi 1: 10.000 - 1 = 9999.",
+        "explanation": "Muốn tìm số liền trước, ta lấy số đó trừ đi 1: 10000 - 1 = 9999.",
         "level": 2,
         "topic": "numbers_roman"
     },
     {
+        "type": "mcq",
         "text": "Nam gieo một con xúc xắc. Khả năng Nam gieo được mặt 7 chấm là:",
         "options": ["Không thể", "Có thể", "Chắc chắn", "Rất cao"],
         "correctVal": "Không thể",
@@ -253,6 +276,7 @@ export const BACKUP_QUESTIONS = [
     
     // --- MIXED (Hỗn hợp) ---
     {
+        "type": "mcq",
         "text": "Trong các tháng sau, tháng nào có 30 ngày?",
         "options": ["Tháng 4", "Tháng 1", "Tháng 5", "Tháng 12"],
         "correctVal": "Tháng 4",
@@ -261,14 +285,16 @@ export const BACKUP_QUESTIONS = [
         "topic": "money_units"
     },
     {
+        "type": "mcq",
         "text": "Một năm nhuận có bao nhiêu ngày?",
-        "options": ["366 ngày", "365 ngày", "360 ngày", "364 ngày"],
-        "correctVal": "366 ngày",
+        "options": ["366", "365", "360", "364"],
+        "correctVal": "366",
         "explanation": "Năm thường có 365 ngày, năm nhuận có thêm 1 ngày là 366 ngày.",
         "level": 3,
         "topic": "money_units"
     },
     {
+        "type": "mcq",
         "text": "Số tròn nghìn ở giữa 4000 và 6000 là:",
         "options": ["5000", "4500", "5500", "5001"],
         "correctVal": "5000",
@@ -277,14 +303,16 @@ export const BACKUP_QUESTIONS = [
         "topic": "numbers_roman"
     },
     {
-        "text": "Chu vi hình tam giác có độ dài các cạnh là 10cm, 12cm, 15cm là:",
-        "options": ["37cm", "30cm", "40cm", "35cm"],
-        "correctVal": "37cm",
+        "type": "mcq",
+        "text": "Chu vi hình tam giác có độ dài các cạnh là 10cm, 12cm, 15cm là (cm):",
+        "options": ["37", "30", "40", "35"],
+        "correctVal": "37",
         "explanation": "Chu vi tam giác = tổng độ dài các cạnh = 10 + 12 + 15 = 37 (cm).",
         "level": 3,
         "topic": "geometry"
     },
     {
+        "type": "mcq",
         "text": "Biểu thức 30 : 5 + 10 có giá trị là:",
         "options": ["16", "20", "6", "50"],
         "correctVal": "16",
@@ -293,6 +321,7 @@ export const BACKUP_QUESTIONS = [
         "topic": "expressions"
     },
     {
+        "type": "mcq",
         "text": "Nếu hôm nay là Thứ Ba, ngày 1. Thứ Ba tuần sau là ngày mấy?",
         "options": ["Ngày 8", "Ngày 7", "Ngày 9", "Ngày 6"],
         "correctVal": "Ngày 8",
@@ -301,9 +330,10 @@ export const BACKUP_QUESTIONS = [
         "topic": "money_units"
     },
     {
+        "type": "mcq",
         "text": "Có 30 quả cam xếp vào các hộp, mỗi hộp 6 quả. Hỏi xếp được bao nhiêu hộp?",
-        "options": ["5 hộp", "6 hộp", "4 hộp", "3 hộp"],
-        "correctVal": "5 hộp",
+        "options": ["5", "6", "4", "3"],
+        "correctVal": "5",
         "explanation": "30 : 6 = 5 (hộp).",
         "level": 2,
         "topic": "word_problems"

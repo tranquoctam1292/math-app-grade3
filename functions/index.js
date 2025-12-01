@@ -49,7 +49,7 @@ exports.generateQuestions = onCall({ secrets: [apiKey] }, async (request) => {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.5, // Tăng nhẹ để AI sáng tạo hơn trong việc tạo đề
+      temperature: 0.2, // Tăng nhẹ để AI sáng tạo hơn trong việc tạo đề
       responseSchema: responseSchema
     }
   };

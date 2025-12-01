@@ -1,8 +1,9 @@
 import React from 'react';
-import { ArrowLeft, PiggyBank, Smile, Frown, ArrowRight, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, PiggyBank, Smile, Frown, ArrowRight } from 'lucide-react';
 import { ClayButton, MathText } from '../lib/helpers';
 import { REWARD_PER_LEVEL } from '../lib/constants';
-import { fmt } from '../lib/utils';
+// ✅ CẬP NHẬT IMPORT: Thêm normalizeVal
+import { fmt, normalizeVal } from '../lib/utils';
 
 // Import các dạng bài tập mới
 import QuizMCQ from './quiz_types/QuizMCQ';
@@ -17,18 +18,34 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
     
     if (!q) return <div className="p-6 text-center">Đang tải...</div>;
 
-    // Logic kiểm tra đúng sai để hiển thị Modal kết quả
+    // ✅ SỬA ĐỔI: Logic kiểm tra đúng sai nhất quán với MathApp.js
     let isCorrect = false;
     if (isSubmitted) {
         if (q.type === 'sorting') {
-            isCorrect = JSON.stringify(selectedOption) === JSON.stringify(q.correctOrder);
+            // Sorting: selectedOption đang là JSON string (do MathApp convert) -> Parse lại để so sánh
+            let userArr = [];
+            try { 
+                // Nếu selectedOption là string thì parse, nếu là array sẵn thì giữ nguyên
+                userArr = typeof selectedOption === 'string' ? JSON.parse(selectedOption) : selectedOption;
+            } catch (e) {
+                console.warn("Lỗi parse selectedOption:", e);
+            }
+            
+            const correctArr = q.correctOrder || [];
+            
+            // So sánh từng phần tử bằng normalizeVal
+            isCorrect = Array.isArray(userArr) && 
+                        userArr.length === correctArr.length && 
+                        userArr.every((val, i) => normalizeVal(val) === normalizeVal(correctArr[i]));
+
         } else if (q.type === 'matching') {
-            isCorrect = selectedOption === true;
-        } else if (q.type === 'fill_blank') {
-            isCorrect = String(selectedOption).trim() === String(q.correctVal).trim();
+            // Matching: Đúng khi giá trị là true hoặc chuỗi "true"
+            isCorrect = selectedOption === true || String(selectedOption) === "true";
+
         } else {
-            // MCQ & Comparison
-            isCorrect = String(selectedOption).trim() === String(q.correctVal).trim();
+            // MCQ & Comparison & FillBlank
+            // So sánh lỏng bằng normalizeVal
+            isCorrect = normalizeVal(selectedOption) === normalizeVal(q.correctVal);
         }
     }
 
@@ -125,7 +142,7 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                                     <div className="text-xs font-bold text-slate-400 uppercase mb-1">Đáp án đúng là</div>
                                     <div className="text-xl font-black text-green-600 bg-green-50 py-2 rounded-xl border border-green-100">
                                         {q.type === 'sorting' 
-                                            ? q.correctOrder.join(' → ') 
+                                            ? (Array.isArray(q.correctOrder) ? q.correctOrder.join(' → ') : q.correctOrder)
                                             : q.type === 'matching' 
                                                 ? 'Xem giải thích bên dưới'
                                                 : (q.correctOption || q.correctVal)
