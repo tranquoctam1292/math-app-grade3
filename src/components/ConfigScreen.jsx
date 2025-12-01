@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Settings, XCircle, Trophy, Calendar, ListChecks, CheckCircle,
-  Save, UserCog, LogOut, HelpCircle, Sparkles, MessageSquarePlus
+  Settings, XCircle, Trophy, ListChecks, CheckCircle,
+  Save, Sparkles, HelpCircle
 } from 'lucide-react';
 import { TOPICS_LIST, ICON_MAP, SEMESTER_DEFAULT_TOPICS } from '../lib/constants';
-import FeedbackModal from './FeedbackModal'; // Import modal mới
+import { ClayButton } from '../lib/helpers'; // Tận dụng ClayButton cho đồng bộ
 
-const ConfigScreen = ({ config, saveConfig, setGameState, onLogout, appUser }) => {
+const ConfigScreen = ({ config, saveConfig, setGameState }) => {
   const [localConfig, setLocalConfig] = useState(config);
-  const [showFeedback, setShowFeedback] = useState(false); // State cho modal
 
   useEffect(() => {
     setLocalConfig(config);
@@ -28,165 +27,107 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout, appUser }) =
       selectedTopics: SEMESTER_DEFAULT_TOPICS[semester] || [],
     });
   };
-
-  const handleLogout = () => {
-    if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-      onLogout(true);
-    }
-  };
   
-  // --- UI ĐỘ KHÓ ---
+  // UI Definitions
   const difficultyLevels = {
     easy: { label: 'Khởi động', sub: 'Dành cho bé cần củng cố gốc (Level 1-2)', color: 'green', icon: Trophy },
     medium: { label: 'Tiêu chuẩn', sub: 'Bám sát SGK trên lớp (Level 2-3)', color: 'blue', icon: ListChecks },
     hard: { label: 'Thần đồng', sub: 'Thử thách tư duy & HS Giỏi (Level 3-4)', color: 'red', icon: Sparkles },
   };
 
-  const clayButtonClasses = "relative overflow-hidden transition-all duration-150 ease-in-out rounded-2xl border-2 border-transparent active:scale-95 active:shadow-none shadow-[0_6px_0_rgba(0,0,0,0.15)] cursor-pointer";
-
   return (
-    <div className="flex flex-col h-full bg-white relative">
+    <div className="flex flex-col h-full bg-slate-50 relative">
       {/* Header */}
-      <div className="flex justify-between items-center p-4 border-b border-slate-200">
+      <div className="flex justify-between items-center p-6 bg-white shadow-sm shrink-0 z-10">
         <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-          <Settings className="w-7 h-7 text-slate-500" />
-          Cấu Hình
+          <Settings className="text-orange-500" />
+          Cấu Hình Học Tập
         </h1>
-        <button type="button" onClick={() => setGameState('home')} className="p-1">
-          <XCircle className="w-8 h-8 text-slate-400 hover:text-red-500 transition-colors" />
-        </button>
+        <ClayButton onClick={() => setGameState('home')} className="w-10 h-10 flex items-center justify-center !rounded-full !p-0">
+          <XCircle size={24} className="text-slate-400 hover:text-red-500 transition-colors" />
+        </ClayButton>
       </div>
 
-      <div className="flex-grow p-4 overflow-y-auto space-y-6">
+      <div className="flex-grow p-4 overflow-y-auto space-y-6 no-scrollbar pb-24">
         {/* Difficulty Section */}
-        <div>
-          <h2 className="text-lg font-bold text-slate-700 mb-3">Độ khó</h2>
+        <section>
+          <h2 className="text-lg font-black text-slate-700 mb-3 px-2">Độ khó</h2>
           <div className="grid grid-cols-3 gap-3">
-            {/* SỬA TẠI ĐÂY: map lấy icon và đặt tên là LevelIcon */}
             {Object.entries(difficultyLevels).map(([key, { label, sub, color, icon: LevelIcon }]) => (
-              <button
-                type="button"
+              <ClayButton
                 key={key}
                 onClick={() => setLocalConfig({ ...localConfig, difficultyMode: key })}
-                className={`text-center p-3 rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-1 ${
+                className={`p-3 !rounded-2xl flex flex-col items-center justify-center gap-1 h-32 ${
                   localConfig.difficultyMode === key
-                    ? `bg-${color}-100 text-${color}-800 border-${color}-400 font-bold shadow-inner`
-                    : 'bg-slate-50 border-slate-200 hover:border-slate-400'
+                    ? `bg-${color}-100 border-${color}-300 ring-2 ring-${color}-400`
+                    : 'bg-white border-slate-100'
                 }`}
               >
-                {/* QUAN TRỌNG: Phải dùng thẻ LevelIcon ở dòng dưới đây */}
-                <LevelIcon size={24} className={localConfig.difficultyMode === key ? `text-${color}-600` : 'text-slate-400'} />
-                
-                <span className="block text-sm font-bold">{label}</span>
-                <span className="text-[10px] text-slate-500 leading-tight">{sub}</span>
-              </button>
+                <LevelIcon size={24} className={localConfig.difficultyMode === key ? `text-${color}-600` : 'text-slate-300'} />
+                <span className={`block text-sm font-black ${localConfig.difficultyMode === key ? `text-${color}-700` : 'text-slate-500'}`}>{label}</span>
+                <span className="text-[9px] text-slate-400 leading-tight font-bold">{sub}</span>
+              </ClayButton>
             ))}
           </div>
-        </div>
+        </section>
 
         {/* Semester Section */}
-        <div>
-          <h2 className="text-lg font-bold text-slate-700 mb-3">Học kỳ</h2>
-          <div className="grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => handleSemesterChange('hk1')}
-              className={`py-2 px-4 rounded-full text-center font-semibold transition-all ${
-                localConfig.semester === 'hk1' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'
-              }`}
-            >
-              Học kỳ 1
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSemesterChange('hk2')}
-              className={`py-2 px-4 rounded-full text-center font-semibold transition-all ${
-                localConfig.semester === 'hk2' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'
-              }`}
-            >
-              Học kỳ 2
-            </button>
+        <section>
+          <h2 className="text-lg font-black text-slate-700 mb-3 px-2">Học kỳ</h2>
+          <div className="grid grid-cols-2 gap-3 p-1">
+            {['hk1', 'hk2'].map(sem => (
+                <ClayButton
+                    key={sem}
+                    onClick={() => handleSemesterChange(sem)}
+                    colorClass={localConfig.semester === sem ? 'bg-indigo-500 text-white' : 'bg-white text-slate-500'}
+                    className="h-12 font-black text-lg"
+                >
+                    {sem === 'hk1' ? 'Học kỳ 1' : 'Học kỳ 2'}
+                </ClayButton>
+            ))}
           </div>
-        </div>
+        </section>
 
         {/* Topics Section */}
-        <div>
-          <h2 className="text-lg font-bold text-slate-700 mb-3">Chủ đề ôn tập</h2>
+        <section>
+          <h2 className="text-lg font-black text-slate-700 mb-3 px-2">Chủ đề ôn tập</h2>
           <div className="space-y-2">
             {TOPICS_LIST.map((topic) => {
-              // Icon cho Topic lấy từ ICON_MAP
               const TopicIcon = ICON_MAP[topic.iconName] || HelpCircle;
               const isSelected = localConfig.selectedTopics.includes(topic.id);
               return (
-                <button
-                  type="button"
+                <ClayButton
                   key={topic.id}
                   onClick={() => toggleTopic(topic.id)}
-                  className={`w-full flex items-center p-3 rounded-lg border-2 transition-all ${
+                  className={`w-full flex items-center p-3 !rounded-xl border transition-all ${
                     isSelected
-                      ? 'bg-indigo-50 text-indigo-700 font-bold border-indigo-200 shadow-sm'
-                      : 'bg-white hover:bg-slate-50 border-slate-100 text-slate-600'
+                      ? 'bg-indigo-50 border-indigo-200'
+                      : 'bg-white border-slate-100 opacity-80'
                   }`}
                 >
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${isSelected ? 'bg-white' : 'bg-slate-100'}`}>
-                     <TopicIcon className={`w-5 h-5 ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`} />
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${isSelected ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
+                     <TopicIcon size={20} className={isSelected ? 'text-indigo-500' : 'text-slate-400'} />
                   </div>
-                  <span className="flex-grow text-left">{topic.label}</span>
+                  <span className={`flex-grow text-left font-bold ${isSelected ? 'text-indigo-700' : 'text-slate-500'}`}>{topic.label}</span>
                   {isSelected && <CheckCircle className="w-5 h-5 text-indigo-500" />}
-                </button>
+                </ClayButton>
               );
             })}
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-slate-200 bg-white space-y-3">
-        {/* Nút Góp ý mới */}
-        <button
-            type="button"
-            onClick={() => setShowFeedback(true)}
-            className={`${clayButtonClasses} bg-yellow-100 text-yellow-700 border-yellow-200 w-full py-3 font-bold text-sm flex items-center justify-center gap-2 hover:bg-yellow-200`}
-        >
-            <MessageSquarePlus className="inline-block" size={18} />
-            Góp ý / Báo lỗi
-        </button>
-
-        <button
-          type="button"
+      {/* Footer Floating */}
+      <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-white via-white to-transparent pt-10">
+        <ClayButton
           onClick={() => saveConfig(localConfig)}
-          className={`${clayButtonClasses} bg-indigo-500 text-white w-full py-4 text-lg font-bold flex items-center justify-center gap-2`}
+          colorClass="bg-indigo-600 text-white border-indigo-700"
+          className="w-full h-14 text-xl font-black flex items-center justify-center gap-2 shadow-xl"
         >
-          <Save className="inline-block" size={20} />
+          <Save size={24} />
           Lưu Cấu Hình
-        </button>
-
-        <div className="grid grid-cols-2 gap-3 mt-3">
-            <button
-                type="button"
-                onClick={() => setGameState('user_profile')}
-                className={`${clayButtonClasses} bg-slate-100 text-slate-700 w-full py-3 font-bold text-sm flex items-center justify-center gap-2`}
-            >
-                <UserCog className="inline-block" size={18} />
-                Tài khoản
-            </button>
-             <button
-                type="button"
-                onClick={handleLogout}
-                className={`${clayButtonClasses} bg-white text-red-500 border-red-100 w-full py-3 font-bold text-sm flex items-center justify-center gap-2 hover:bg-red-50`}
-            >
-                <LogOut className="inline-block" size={18} />
-                Đăng xuất
-            </button>
-        </div>
+        </ClayButton>
       </div>
-
-      {/* Render Modal */}
-      <FeedbackModal 
-          isOpen={showFeedback} 
-          onClose={() => setShowFeedback(false)} 
-          appUser={appUser} 
-      />
     </div>
   );
 };

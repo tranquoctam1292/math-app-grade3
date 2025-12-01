@@ -105,7 +105,15 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                         {q.svgContent && (
                             <div className="mt-4 flex justify-center animation-fade-in">
                                 <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-inner">
-                                    <svg width="100%" height="auto" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg" className="max-w-[280px] h-auto mx-auto" dangerouslySetInnerHTML={{ __html: q.svgContent }} style={{ minHeight: '120px' }} />
+                                    {/* FIX: Bỏ height="auto" */}
+                                    <svg 
+                                        width="100%" 
+                                        viewBox="0 0 300 200" 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        className="max-w-[280px] h-auto mx-auto" 
+                                        dangerouslySetInnerHTML={{ __html: q.svgContent }} 
+                                        style={{ minHeight: '120px' }} 
+                                    />
                                 </div>
                             </div>
                         )}

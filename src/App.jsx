@@ -10,7 +10,7 @@ import {
   doc, setDoc, getDoc, updateDoc
 } from 'firebase/firestore';
 
-// ✅ IMPORT ĐÃ CẬP NHẬT: Thêm normalizeVal và solveEquation
+// ✅ IMPORT ĐÃ CẬP NHẬT
 import { 
   getDeviceId, fmt, solveSimpleExpression, solveComparison, 
   encodeEmail, getWeakTopics, normalizeVal, solveEquation 
@@ -203,17 +203,12 @@ const MathApp = () => {
     return () => unsubscribe();
   }, []);
 
-  // --- HÀM LOAD DỮ LIỆU NGƯỜI DÙNG (Đã sửa lỗi) ---
   const loadUserData = async (currentUser) => {
-    // 1. QUAN TRỌNG: Chặn ngay nếu không có user hợp lệ
-    // Giúp tránh lỗi "Missing permissions" khi Auth chưa chạy xong
     if (!currentUser || !currentUser.uid) {
-        console.log("⚠️ loadUserData: Chưa có user ID, hủy bỏ.");
         return; 
     }
 
     setIsLoading(true);
-    console.log("🔍 Kiểm tra đường dẫn:", `artifacts/${appId}/public/data/math_user_data/${currentUser.uid}`);
     try {
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', currentUser.uid);
       const userDocSnap = await getDoc(userDocRef);
@@ -226,7 +221,6 @@ const MathApp = () => {
         setUserStats(data.stats || {});
         if (data.config) setConfig(data.config);
       } else {
-        // Tạo dữ liệu mặc định cho user mới
         const initData = {
           profiles: [], 
           piggyBank: 0, 
@@ -243,36 +237,19 @@ const MathApp = () => {
         setProfiles([]);
         setUserStats({});
       }
-      
-      // Load xong thì chuyển sang màn hình chọn hồ sơ
       setGameState('profile_select');
-
     } catch (e) {
       console.error("❌ Lỗi load data:", e);
-      // 2. QUAN TRỌNG: Tạm thời comment 2 dòng này lại 
-      // để tránh App bị reset về Home liên tục khi gặp lỗi nhỏ
-      
-      // setAppError("Không thể tải dữ liệu."); 
-      // setGameState('home'); 
-      
     } finally {
       setIsLoading(false);
     }
   };
 
-  // --- USE EFFECT ĐÃ ĐƯỢC CẬP NHẬT THEO YÊU CẦU ---
   useEffect(() => {
-    // THÊM ĐIỀU KIỆN NÀY:
-    // Chỉ chạy khi đã có user (appUser) và user đó có uid
     if (appUser && appUser.uid) {
-        console.log("✅ Đã có User ID:", appUser.uid, "-> Bắt đầu tải dữ liệu.");
         loadUserData(appUser);
-    } else {
-        console.log("⏳ Đang đợi đăng nhập... (Chưa gọi dữ liệu)");
-        // Không làm gì cả, tuyệt đối không gọi loadUserData
     }
-    // Nếu chưa có user (null hoặc đang loading), thì KHÔNG LÀM GÌ CẢ.
-  }, [appUser]); // Chỉ phụ thuộc vào appUser
+  }, [appUser]);
 
   useEffect(() => {
     if (currentProfile && !['playing', 'result', 'user_profile', 'report', 'shop', 'config'].includes(gameState)) {
@@ -301,6 +278,22 @@ const MathApp = () => {
     } catch { showNotification('error', "Lỗi lưu dữ liệu."); }
   };
 
+  const handleSaveProfiles = async (updatedProfiles) => {
+    setProfiles(updatedProfiles);
+    if (currentProfile && !updatedProfiles.find(p => p.id === currentProfile.id)) {
+        setCurrentProfile(null);
+    }
+    if (appUser && appUser.uid) {
+        try {
+            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
+            await updateDoc(userDocRef, { profiles: updatedProfiles });
+            showNotification('success', "Đã cập nhật danh sách hồ sơ!");
+        } catch (e) {
+            showNotification('error', "Lỗi khi lưu danh sách hồ sơ.");
+        }
+    }
+  };
+
   const saveConfig = async (newConfig) => {
       if (!appUser || !currentProfile) { showNotification('error', "Chọn hồ sơ trước."); return; }
       setConfig(newConfig);
@@ -314,14 +307,12 @@ const MathApp = () => {
   const generateQuizQuestions = useCallback(async (isBackground = false) => {
     if (!currentProfile) return null;
 
-    // 1. Phân tích điểm yếu (Giữ nguyên)
     const currentStats = userStats[currentProfile.id] || {};
     const weakTopics = getWeakTopics({ topics: currentStats.topics });
     const personalizationInstruction = weakTopics.length > 0 
     ? `Học sinh đang yếu: "${weakTopics.join(', ')}". Hãy ưu tiên tạo câu hỏi thuộc các chủ đề này.`
     : `Học sinh học tốt. Hãy tăng cường câu đố tư duy logic và các dạng bài ghép thẻ/sắp xếp.`;
 
-    // 2. Setup Prompt MỚI
     const randomSeed = Math.floor(Math.random() * 1000000); 
     const dynamicConstraint = getRandomConstraints(); 
     const topicLabels = TOPICS_LIST.filter(t => config.selectedTopics.includes(t.id)).map(t => t.label).join(", ");
@@ -334,14 +325,14 @@ const MathApp = () => {
     NỘI DUNG TẬP TRUNG: ${topicLabels}.
     YÊU CẦU: ${personalizationInstruction} ${dynamicConstraint}
     
-    QUY TẮC BẮT BUỘC VỀ ĐÁP ÁN (correctVal):
-    - Với dạng 'finding_x' hoặc tính toán: 'correctVal' CHỈ ĐƯỢC CHỨA SỐ (VD: "15", không được là "x=15" hay "15 quả").
-    - Luôn đảm bảo 'correctVal' có mặt trong mảng 'options' (nếu là trắc nghiệm).
+    QUY TẮC QUAN TRỌNG:
+    - 'correctVal' phải là một con số hoặc từ đơn giản, TUYỆT ĐỐI KHÔNG được là "undefined", "null" hoặc chuỗi rỗng.
+    - Với dạng trắc nghiệm (mcq), 'options' phải chứa 4 giá trị khác nhau, bao gồm 'correctVal'.
     
     TYPES:
     1. "mcq" (40%): Trắc nghiệm.
-    2. "fill_blank" (20%): Điền số. VD: "5 + __ = 10", correctVal: "5".
-    3. "comparison" (10%): So sánh. Options: [">", "<", "="].
+    2. "fill_blank" (20%): Điền số.
+    3. "comparison" (10%): So sánh (>, <, =).
     4. "sorting" (15%): Sắp xếp.
     5. "matching" (15%): Ghép cặp.
 
@@ -359,10 +350,10 @@ const MathApp = () => {
                 type: q.type || 'mcq'
             };
 
-            // --- LOGIC SANITY CHECK (GIAI ĐOẠN 1) ---
+            // --- LOGIC SANITY CHECK (FIX LỖI UNDEFINED) ---
             if (processedQ.type === 'mcq' || processedQ.type === 'fill_blank' || processedQ.type === 'comparison') {
-                let correctVal = String(q.correctVal).trim();
-                let options = q.options || [];
+                let correctVal = String(q.correctVal).replace(/["']/g, "").trim(); // Xóa ngoặc kép thừa nếu có
+                let options = Array.isArray(q.options) ? q.options : [];
 
                 // 1. Tự giải lại bài toán để lấy đáp án chuẩn (Ghi đè AI)
                 let computedVal = null;
@@ -374,30 +365,49 @@ const MathApp = () => {
                     computedVal = solveSimpleExpression(processedQ.text);
                 }
 
-                if (computedVal !== null) {
+                if (computedVal !== null && !isNaN(computedVal)) {
                     correctVal = String(computedVal);
-                    processedQ.correctVal = correctVal; // Ghi đè đáp án của AI
+                    processedQ.correctVal = correctVal;
                 }
 
-                // 2. Xử lý Options cho MCQ
+                // 2. Xử lý Options cho MCQ (Chống lỗi undefined)
                 if (processedQ.type === 'mcq') {
-                    // Đảm bảo đáp án đúng có trong options (Dùng normalizeVal)
+                    // Bước 1: Lọc sạch rác ngay từ đầu
+                    options = options.map(o => String(o).trim())
+                                     .filter(o => o !== "" && o !== "undefined" && o !== "null");
+
+                    // Bước 2: Đảm bảo đáp án đúng có trong options
+                    // Nếu correctVal bị lỗi (là undefined/null), gán tạm giá trị mặc định để không crash
+                    if (correctVal === "undefined" || correctVal === "null" || correctVal === "") {
+                        correctVal = "0"; // Giá trị fallback an toàn
+                        processedQ.correctVal = "0";
+                    }
+
                     const hasCorrectOption = options.some(opt => normalizeVal(opt) === normalizeVal(correctVal));
-                    
                     if (!hasCorrectOption) {
-                        options[0] = correctVal;
+                        options.unshift(correctVal); // Thêm vào đầu
                     }
                     
-                    // Fill đầy options nếu thiếu
+                    // Bước 3: Fill đầy options nếu thiếu
                     while(options.length < 4) {
+                        // Lấy số từ đáp án đúng để tạo số giả xung quanh
                         const valMatch = correctVal.match(/(\d+)/);
                         const baseVal = valMatch ? parseInt(valMatch[0]) : 50; 
                         let fakeNum = baseVal + Math.floor(Math.random() * 20) - 10;
                         if (fakeNum < 0) fakeNum = 0; 
+                        
+                        // Tránh trùng với đáp án đúng
+                        if (fakeNum === baseVal) fakeNum = baseVal + 1;
+
                         const fakeOption = String(fakeNum);
                         if (!options.includes(fakeOption)) options.push(fakeOption);
                     }
-                    processedQ.options = [...new Set(options)].sort(() => Math.random() - 0.5);
+
+                    // Bước 4: Lọc LẠI một lần cuối cùng để chắc chắn không còn rác do quá trình sinh số gây ra
+                    processedQ.options = [...new Set(options)]
+                        .filter(o => o && String(o).trim() !== "undefined")
+                        .sort(() => Math.random() - 0.5);
+
                 } else if (processedQ.type === 'comparison') {
                     processedQ.options = ['>', '=', '<'];
                 }
@@ -417,7 +427,6 @@ const MathApp = () => {
         console.warn(isBackground ? "Lỗi Preload:" : "Lỗi AI:", e);
         if (isBackground) return null;
         
-        // Fallback offline
         return processQuestions([...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, 10));
     }
   }, [currentProfile, userStats, config]);
@@ -449,7 +458,6 @@ const MathApp = () => {
       setGameState('playing'); setQuestionStartTime(Date.now());
   };
 
-  // Preload Effect
   useEffect(() => {
       if (gameState === 'result' && currentProfile) {
           const preload = async () => {
@@ -460,12 +468,10 @@ const MathApp = () => {
       }
   }, [gameState, currentProfile, generateQuizQuestions]); 
 
-  // --- HANDLE ANSWER (UPDATED WITH NORMALIZATION) ---
   const handleSelectOption = (userAnswerData) => {
     if (isSubmitted) return;
     const timeTaken = Math.round((Date.now() - questionStartTime) / 1000);
     
-    // Lưu tạm câu trả lời để hiển thị
     let displayAnswer = userAnswerData;
     if (typeof userAnswerData === 'object') {
         displayAnswer = JSON.stringify(userAnswerData);
@@ -475,9 +481,7 @@ const MathApp = () => {
     const currentQ = quizData[currentQIndex];
     let isCorrect = false;
 
-    // --- LOGIC CHECK ĐÁP ÁN ĐÃ CHUẨN HÓA (GIAI ĐOẠN 2) ---
     if (currentQ.type === 'sorting') {
-        // So sánh mảng (Normalize từng phần tử)
         const userArr = Array.isArray(userAnswerData) ? userAnswerData : [];
         const correctArr = Array.isArray(currentQ.correctOrder) ? currentQ.correctOrder : [];
         
@@ -487,8 +491,6 @@ const MathApp = () => {
     } else if (currentQ.type === 'matching') {
         isCorrect = userAnswerData === true; 
     } else {
-        // MCQ, FillBlank, Comparison
-        // Dùng hàm normalizeVal để so sánh lỏng
         isCorrect = normalizeVal(userAnswerData) === normalizeVal(currentQ.correctVal);
     }
 
@@ -587,7 +589,15 @@ const MathApp = () => {
       switch (gameState) {
           case 'auth': return <AuthScreen onLoginSuccess={handleAppLogin} errorMsg={authError} setErrorMsg={setAuthError} />; 
           case 'profile_select': return <ProfileScreen profiles={profiles} setCurrentProfile={setCurrentProfile} isCreatingProfile={isCreatingProfile} setIsCreatingProfile={setIsCreatingProfile} newProfileName={newProfileName} setNewProfileName={setNewProfileName} newProfileAvatar={newProfileAvatar} setNewProfileAvatar={setNewProfileAvatar} createProfile={createProfile} appUser={appUser} />; 
-          case 'user_profile': return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleAppLogout} />; 
+          case 'user_profile': 
+            return <UserProfileScreen 
+                appUser={appUser} 
+                setAppUser={setAppUser} 
+                setGameState={setGameState} 
+                onLogout={handleAppLogout}
+                profiles={profiles}
+                onSaveProfiles={handleSaveProfiles}
+            />; 
           case 'home': return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} isAuthReady={isAuthReady} />; 
           case 'playing': return <React.Suspense fallback={<div className="flex items-center justify-center h-full"><Loader className="animate-spin"/></div>}><QV quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} /></React.Suspense>;
           case 'result': return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
