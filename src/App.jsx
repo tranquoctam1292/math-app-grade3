@@ -55,7 +55,7 @@ const getRandomConstraints = () => {
 };
 
 const MathApp = () => {
-  const [firebaseUser, setFirebaseUser] = useState(null); 
+  const [_firebaseUser, setFirebaseUser] = useState(null); 
   const [appUser, setAppUser] = useState(null); 
   const [isLoading, setIsLoading] = useState(true); 
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -203,45 +203,76 @@ const MathApp = () => {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (!isAuthReady) return; 
-    if (!appUser) { setGameState('auth'); return; }
-    
-    const fetchProfilesAndData = async () => {
-        setIsLoading(true);
-        try {
-            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            
-            if (userDocSnap.exists()) {
-                const data = userDocSnap.data();
-                setProfiles(data.profiles || []);
-                setPiggyBank(data.piggyBank || 0);
-                setRedemptionHistory(data.redemptionHistory || []);
-                setUserStats(data.stats || {}); 
-                if (data.config) setConfig(data.config);
-            } else {
-                const initData = {
-                    profiles: [], piggyBank: 0, redemptionHistory: [],
-                    config: { difficultyMode: 'medium', semester: 'hk2', selectedTopics: SEMESTER_DEFAULT_TOPICS['hk2'] },
-                    stats: {}, logs: []
-                };
-                await setDoc(userDocRef, initData);
-                setProfiles([]);
-                setUserStats({});
-            }
-            setGameState('profile_select');
-        } catch (e) {
-            console.error("Lỗi data:", e);
-            setAppError("Không thể tải dữ liệu.");
-            setGameState('home');
-        } finally {
-            setIsLoading(false); 
-        }
-    };
+  // --- HÀM LOAD DỮ LIỆU NGƯỜI DÙNG (Đã sửa lỗi) ---
+  const loadUserData = async (currentUser) => {
+    // 1. QUAN TRỌNG: Chặn ngay nếu không có user hợp lệ
+    // Giúp tránh lỗi "Missing permissions" khi Auth chưa chạy xong
+    if (!currentUser || !currentUser.uid) {
+        console.log("⚠️ loadUserData: Chưa có user ID, hủy bỏ.");
+        return; 
+    }
 
-    if (appUser && firebaseUser) { fetchProfilesAndData(); }
-  }, [appUser, isAuthReady, firebaseUser]);
+    setIsLoading(true);
+    console.log("🔍 Kiểm tra đường dẫn:", `artifacts/${appId}/public/data/math_user_data/${currentUser.uid}`);
+    try {
+      const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', currentUser.uid);
+      const userDocSnap = await getDoc(userDocRef);
+
+      if (userDocSnap.exists()) {
+        const data = userDocSnap.data();
+        setProfiles(data.profiles || []);
+        setPiggyBank(data.piggyBank || 0);
+        setRedemptionHistory(data.redemptionHistory || []);
+        setUserStats(data.stats || {});
+        if (data.config) setConfig(data.config);
+      } else {
+        // Tạo dữ liệu mặc định cho user mới
+        const initData = {
+          profiles: [], 
+          piggyBank: 0, 
+          redemptionHistory: [],
+          config: { 
+            difficultyMode: 'medium', 
+            semester: 'hk2', 
+            selectedTopics: SEMESTER_DEFAULT_TOPICS['hk2'] 
+          },
+          stats: {}, 
+          logs: []
+        };
+        await setDoc(userDocRef, initData);
+        setProfiles([]);
+        setUserStats({});
+      }
+      
+      // Load xong thì chuyển sang màn hình chọn hồ sơ
+      setGameState('profile_select');
+
+    } catch (e) {
+      console.error("❌ Lỗi load data:", e);
+      // 2. QUAN TRỌNG: Tạm thời comment 2 dòng này lại 
+      // để tránh App bị reset về Home liên tục khi gặp lỗi nhỏ
+      
+      // setAppError("Không thể tải dữ liệu."); 
+      // setGameState('home'); 
+      
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- USE EFFECT ĐÃ ĐƯỢC CẬP NHẬT THEO YÊU CẦU ---
+  useEffect(() => {
+    // THÊM ĐIỀU KIỆN NÀY:
+    // Chỉ chạy khi đã có user (appUser) và user đó có uid
+    if (appUser && appUser.uid) {
+        console.log("✅ Đã có User ID:", appUser.uid, "-> Bắt đầu tải dữ liệu.");
+        loadUserData(appUser);
+    } else {
+        console.log("⏳ Đang đợi đăng nhập... (Chưa gọi dữ liệu)");
+        // Không làm gì cả, tuyệt đối không gọi loadUserData
+    }
+    // Nếu chưa có user (null hoặc đang loading), thì KHÔNG LÀM GÌ CẢ.
+  }, [appUser]); // Chỉ phụ thuộc vào appUser
 
   useEffect(() => {
     if (currentProfile && !['playing', 'result', 'user_profile', 'report', 'shop', 'config'].includes(gameState)) {

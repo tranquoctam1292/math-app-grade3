@@ -12,17 +12,24 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Rule cho collection dữ liệu người dùng
+    // Rule cho collection dữ liệu người dùng (Giữ nguyên)
     match /artifacts/{appId}/public/data/math_user_data/{userId} {
       allow read, write: if isOwner(userId);
     }
 
-    // Chặn truy cập vào collection tài khoản cũ (math_accounts) vì không dùng nữa
+    // --- RULE MỚI CHO GÓP Ý (FEEDBACK) ---
+    // Cho phép bất kỳ ai đã đăng nhập (kể cả ẩn danh) được TẠO feedback
+    // Nhưng KHÔNG cho phép đọc, sửa, xóa (Bảo mật thông tin người gửi)
+    match /artifacts/{appId}/public/data/app_feedbacks/{document=**} {
+      allow create: if request.auth != null; 
+    }
+
+    // Chặn truy cập vào collection tài khoản cũ
     match /artifacts/{appId}/public/data/math_accounts/{document=**} {
       allow read, write: if false;
     }
     
-    // Mặc định chặn tất cả
+    // Mặc định chặn tất cả các truy cập khác để bảo mật
     match /{document=**} {
       allow read, write: if false;
     }

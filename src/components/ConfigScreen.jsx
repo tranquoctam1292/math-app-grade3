@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   Settings, XCircle, Trophy, Calendar, ListChecks, CheckCircle,
-  Save, UserCog, LogOut, HelpCircle, Sparkles
+  Save, UserCog, LogOut, HelpCircle, Sparkles, MessageSquarePlus
 } from 'lucide-react';
 import { TOPICS_LIST, ICON_MAP, SEMESTER_DEFAULT_TOPICS } from '../lib/constants';
+import FeedbackModal from './FeedbackModal'; // Import modal mới
 
-const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
+const ConfigScreen = ({ config, saveConfig, setGameState, onLogout, appUser }) => {
   const [localConfig, setLocalConfig] = useState(config);
+  const [showFeedback, setShowFeedback] = useState(false); // State cho modal
 
   useEffect(() => {
     setLocalConfig(config);
@@ -33,7 +35,7 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
     }
   };
   
-  // --- CẬP NHẬT MỚI: UI ĐỘ KHÓ RÕ RÀNG HƠN ---
+  // --- UI ĐỘ KHÓ ---
   const difficultyLevels = {
     easy: { label: 'Khởi động', sub: 'Dành cho bé cần củng cố gốc (Level 1-2)', color: 'green', icon: Trophy },
     medium: { label: 'Tiêu chuẩn', sub: 'Bám sát SGK trên lớp (Level 2-3)', color: 'blue', icon: ListChecks },
@@ -43,7 +45,7 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
   const clayButtonClasses = "relative overflow-hidden transition-all duration-150 ease-in-out rounded-2xl border-2 border-transparent active:scale-95 active:shadow-none shadow-[0_6px_0_rgba(0,0,0,0.15)] cursor-pointer";
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-white relative">
       {/* Header */}
       <div className="flex justify-between items-center p-4 border-b border-slate-200">
         <h1 className="text-2xl font-black text-slate-800 flex items-center gap-2">
@@ -60,7 +62,8 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
         <div>
           <h2 className="text-lg font-bold text-slate-700 mb-3">Độ khó</h2>
           <div className="grid grid-cols-3 gap-3">
-            {Object.entries(difficultyLevels).map(([key, { label, sub, color, icon: Icon }]) => (
+            {/* SỬA TẠI ĐÂY: map lấy icon và đặt tên là LevelIcon */}
+            {Object.entries(difficultyLevels).map(([key, { label, sub, color, icon: LevelIcon }]) => (
               <button
                 type="button"
                 key={key}
@@ -71,7 +74,9 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
                     : 'bg-slate-50 border-slate-200 hover:border-slate-400'
                 }`}
               >
-                <Icon size={24} className={localConfig.difficultyMode === key ? `text-${color}-600` : 'text-slate-400'} />
+                {/* QUAN TRỌNG: Phải dùng thẻ LevelIcon ở dòng dưới đây */}
+                <LevelIcon size={24} className={localConfig.difficultyMode === key ? `text-${color}-600` : 'text-slate-400'} />
+                
                 <span className="block text-sm font-bold">{label}</span>
                 <span className="text-[10px] text-slate-500 leading-tight">{sub}</span>
               </button>
@@ -109,7 +114,8 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
           <h2 className="text-lg font-bold text-slate-700 mb-3">Chủ đề ôn tập</h2>
           <div className="space-y-2">
             {TOPICS_LIST.map((topic) => {
-              const Icon = ICON_MAP[topic.iconName] || HelpCircle;
+              // Icon cho Topic lấy từ ICON_MAP
+              const TopicIcon = ICON_MAP[topic.iconName] || HelpCircle;
               const isSelected = localConfig.selectedTopics.includes(topic.id);
               return (
                 <button
@@ -123,7 +129,7 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${isSelected ? 'bg-white' : 'bg-slate-100'}`}>
-                     <Icon className={`w-5 h-5 ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`} />
+                     <TopicIcon className={`w-5 h-5 ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`} />
                   </div>
                   <span className="flex-grow text-left">{topic.label}</span>
                   {isSelected && <CheckCircle className="w-5 h-5 text-indigo-500" />}
@@ -135,7 +141,17 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-slate-200 bg-white">
+      <div className="p-4 border-t border-slate-200 bg-white space-y-3">
+        {/* Nút Góp ý mới */}
+        <button
+            type="button"
+            onClick={() => setShowFeedback(true)}
+            className={`${clayButtonClasses} bg-yellow-100 text-yellow-700 border-yellow-200 w-full py-3 font-bold text-sm flex items-center justify-center gap-2 hover:bg-yellow-200`}
+        >
+            <MessageSquarePlus className="inline-block" size={18} />
+            Góp ý / Báo lỗi
+        </button>
+
         <button
           type="button"
           onClick={() => saveConfig(localConfig)}
@@ -144,6 +160,7 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
           <Save className="inline-block" size={20} />
           Lưu Cấu Hình
         </button>
+
         <div className="grid grid-cols-2 gap-3 mt-3">
             <button
                 type="button"
@@ -163,6 +180,13 @@ const ConfigScreen = ({ config, saveConfig, setGameState, onLogout }) => {
             </button>
         </div>
       </div>
+
+      {/* Render Modal */}
+      <FeedbackModal 
+          isOpen={showFeedback} 
+          onClose={() => setShowFeedback(false)} 
+          appUser={appUser} 
+      />
     </div>
   );
 };
