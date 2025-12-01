@@ -2,11 +2,11 @@ const { onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const axios = require("axios");
 
-const apiKey = defineSecret("GEMINI_API_KEY");
+const apiKey = defineSecret("DEEPSEEK_API_KEY");
 
 exports.generateQuestions = onCall({ 
   secrets: [apiKey],
-  timeoutSeconds: 120, // Tăng thời gian chờ lên 120s
+  timeoutSeconds: 120,
   memory: "512MiB",
   region: "us-central1"
 }, async (request) => {
@@ -14,71 +14,100 @@ exports.generateQuestions = onCall({
     const prompt = request.data.prompt;
     if (!prompt) return { error: "Client không gửi prompt." };
 
-    const GEMINI_API_KEY = apiKey.value();
-    if (!GEMINI_API_KEY) return { error: "Chưa cấu hình GEMINI_API_KEY." };
+    const DEEPSEEK_API_KEY = apiKey.value();
+    if (!DEEPSEEK_API_KEY) return { error: "Chưa cấu hình DEEPSEEK_API_KEY." };
 
-    // Bạn có thể giữ gemini-2.0-flash nếu muốn, hoặc đổi sang gemini-1.5-flash để ổn định hơn
-    const MODEL_NAME = "gemini-2.0-flash"; 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
+    const url = "https://api.deepseek.com/chat/completions";
 
-    // --- THAY ĐỔI QUAN TRỌNG ---
-    // Thay vì dùng responseSchema (gây lỗi 400), ta hướng dẫn JSON ngay trong prompt.
+    // 1. SỬA PROMPT: Yêu cầu rõ ràng trả về Object có key là "questions"
     const jsonInstruction = `
     YÊU CẦU OUTPUT:
-    Hãy trả về một MẢNG JSON (JSON Array) thuần túy, không có markdown block (như \`\`\`json).
-    Mỗi phần tử trong mảng là một object câu hỏi với các trường bắt buộc sau:
-    - "id": (number) ID tự tăng từ 0
-    - "type": (string) Một trong ["mcq", "fill_blank", "comparison", "matching", "sorting"]
-    - "text": (string) Nội dung câu hỏi
-    - "options": (array string) 4 phương án trả lời (nếu là mcq)
-    - "correctVal": (string) Đáp án đúng
-    - "explanation": (string) Giải thích ngắn gọn
-    - "level": (number) Độ khó (2, 3 hoặc 4)
-    - "topic": (string) Chủ đề (ví dụ: "arithmetic")
+    Hãy trả về một JSON OBJECT duy nhất (không phải Array, không có markdown).
+    Cấu trúc bắt buộc:
+    {
+      "questions": [
+        {
+          "id": 0,
+          "type": "mcq", 
+          "text": "Câu hỏi...",
+          "options": ["A", "B", "C", "D"],
+          "correctVal": "A",
+          "explanation": "Giải thích...",
+          "level": 2,
+          "topic": "arithmetic"
+        }
+      ]
+    }
+    
+    Lưu ý:
+    - "type" chọn trong: ["mcq", "fill_blank", "comparison", "matching", "sorting"]
+    - "level" từ 2 đến 4.
     `;
 
     const fullPrompt = jsonInstruction + "\n\n" + "NỘI DUNG YÊU CẦU:\n" + prompt;
 
     const payload = {
-      contents: [{ parts: [{ text: fullPrompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json", // Bắt buộc trả về JSON
-        temperature: 0.4
-      }
-      // Đã bỏ responseSchema để tránh lỗi 400 Bad Request
+      model: "deepseek-chat",
+      messages: [
+        { 
+          role: "system", 
+          content: "Bạn là chuyên gia toán học tiểu học. Bạn chỉ trả về JSON hợp lệ." 
+        },
+        { 
+          role: "user", 
+          content: fullPrompt 
+        }
+      ],
+      // DeepSeek ép kiểu JSON Object rất tốt, nên dùng nó để tránh lỗi cú pháp
+      response_format: { type: "json_object" }, 
+      temperature: 0.4
     };
 
     const response = await axios.post(url, payload, {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+      }
     });
 
-    const data = response.data;
-    const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!content) throw new Error("Gemini không trả về nội dung.");
+    const content = response.data?.choices?.[0]?.message?.content;
+    if (!content) throw new Error("DeepSeek không trả về nội dung.");
 
-    // Xử lý sạch chuỗi JSON (Tìm mảng [...] đầu tiên để tránh lỗi cú pháp)
+    // 2. Xử lý JSON an toàn hơn
     let jsonStr = content.trim();
-    const match = jsonStr.match(/\[[\s\S]*\]/);
-    if (match) {
-        jsonStr = match[0];
+    // Đôi khi DeepSeek vẫn bọc trong markdown ```json ... ```, cần lọc bỏ
+    if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "");
     }
 
     try {
-        const questions = JSON.parse(jsonStr);
-        return questions; // Trả về mảng câu hỏi thành công
+        const parsed = JSON.parse(jsonStr);
+        
+        // Luôn trả về mảng câu hỏi
+        if (parsed.questions && Array.isArray(parsed.questions)) {
+            return parsed.questions;
+        } else if (Array.isArray(parsed)) {
+            return parsed;
+        }
+        
+        // Nếu cấu trúc lạ, log ra để debug
+        console.error("Cấu trúc JSON không khớp:", JSON.stringify(parsed).slice(0, 100));
+        throw new Error("AI trả về JSON nhưng thiếu trường 'questions'.");
+
     } catch (parseErr) {
         console.error("Lỗi parse JSON:", parseErr, "Raw:", jsonStr);
-        throw new Error("AI trả về format không đúng chuẩn JSON.");
+        throw new Error("AI trả về dữ liệu lỗi format.");
     }
 
   } catch (error) {
-    console.error("Function Error:", error.response?.data || error.message);
-    // Trả về lỗi chi tiết để Client biết (và chuyển sang backup)
+    console.error("Function Error:", error.message);
+    
+    // Trả về object lỗi chuẩn để Client không bị lỗi "cannot be decoded"
+    // Lưu ý: Không gửi nguyên error object vì nó có thể chứa circular reference
     return {
-        error: true,
+        debug_error: true,
         message: error.message,
-        details: error.response?.data
+        details: error.response?.data ? JSON.stringify(error.response.data) : "No details"
     };
   }
 });

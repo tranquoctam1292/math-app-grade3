@@ -69,9 +69,11 @@ const MathApp = () => {
   const [newProfileName, setNewProfileName] = useState("");
   const [newProfileAvatar, setNewProfileAvatar] = useState(AVATARS[0]);
 
-  // State mới cho Adaptive AI
+  // State mới cho Adaptive AI & Background Fetching
   const [userStats, setUserStats] = useState({});
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // ✅ STATE QUAN TRỌNG: Lưu trữ câu hỏi đã tải ngầm
   const [preloadedQuiz, setPreloadedQuiz] = useState(null);
   
   const [piggyBank, setPiggyBank] = useState(0);
@@ -139,9 +141,11 @@ const MathApp = () => {
           setProfiles([]);
           setCurrentProfile(null);
           setUserStats({});
-          setPreloadedQuiz(null);
-          localStorage.removeItem('math_app_user_session');
           
+          // ✅ Reset cache khi logout
+          setPreloadedQuiz(null);
+          
+          localStorage.removeItem('math_app_user_session');
           setGameState('auth');
           setIsLoading(false); 
           showNotification('success', 'Đã đăng xuất thành công.');
@@ -152,37 +156,26 @@ const MathApp = () => {
             setCurrentProfile(null);
             setUserStats({});
             localStorage.removeItem('math_app_user_session');
-            
             setGameState('auth');
             showNotification('success', 'Đã đăng xuất.');
         }
       }
   };
 
+  // ... (Giữ nguyên useEffect Auth init và loadUserData không thay đổi) ...
   useEffect(() => {
-    if (!auth) {
-      setAppError("Lỗi cấu hình Firebase!");
-      setIsLoading(false);
-      setIsAuthReady(true);
-      return;
-    }
-
+    if (!auth) { setAppError("Lỗi cấu hình Firebase!"); setIsLoading(false); setIsAuthReady(true); return; }
     const initSystemAuth = async () => {
         try {
             const initialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
-            if (initialAuthToken) {
-                await signInWithCustomToken(auth, initialAuthToken); 
-            } else if (!auth.currentUser) {
-                await signInAnonymously(auth);
-            }
+            if (initialAuthToken) { await signInWithCustomToken(auth, initialAuthToken); } 
+            else if (!auth.currentUser) { await signInAnonymously(auth); }
         } catch(e) { 
-            console.error("Lỗi Auth:", e);
+            console.error("Lỗi Auth:", e); 
             if (!auth.currentUser) await signInAnonymously(auth); 
         }
     };
-    
     initSystemAuth();
-    
     const unsubscribe = onAuthStateChanged(auth, (u) => {
         setFirebaseUser(u);
         if (u) {
@@ -192,27 +185,20 @@ const MathApp = () => {
                     const parsedUser = JSON.parse(savedSession);
                     const finalUid = parsedUser.isAnon ? u.uid : parsedUser.uid;
                     setAppUser({...parsedUser, uid: finalUid});
-                } catch {
-                    localStorage.removeItem('math_app_user_session');
-                }
+                } catch { localStorage.removeItem('math_app_user_session'); }
             }
         }
-        setIsAuthReady(true);
-        setIsLoading(false);
+        setIsAuthReady(true); setIsLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
   const loadUserData = async (currentUser) => {
-    if (!currentUser || !currentUser.uid) {
-        return; 
-    }
-
+    if (!currentUser || !currentUser.uid) return;
     setIsLoading(true);
     try {
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', currentUser.uid);
       const userDocSnap = await getDoc(userDocRef);
-
       if (userDocSnap.exists()) {
         const data = userDocSnap.data();
         setProfiles(data.profiles || []);
@@ -222,33 +208,19 @@ const MathApp = () => {
         if (data.config) setConfig(data.config);
       } else {
         const initData = {
-          profiles: [], 
-          piggyBank: 0, 
-          redemptionHistory: [],
-          config: { 
-            difficultyMode: 'medium', 
-            semester: 'hk2', 
-            selectedTopics: SEMESTER_DEFAULT_TOPICS['hk2'] 
-          },
-          stats: {}, 
-          logs: []
+          profiles: [], piggyBank: 0, redemptionHistory: [],
+          config: { difficultyMode: 'medium', semester: 'hk2', selectedTopics: SEMESTER_DEFAULT_TOPICS['hk2'] },
+          stats: {}, logs: []
         };
         await setDoc(userDocRef, initData);
-        setProfiles([]);
-        setUserStats({});
+        setProfiles([]); setUserStats({});
       }
       setGameState('profile_select');
-    } catch (e) {
-      console.error("❌ Lỗi load data:", e);
-    } finally {
-      setIsLoading(false);
-    }
+    } catch (e) { console.error("❌ Lỗi load data:", e); } finally { setIsLoading(false); }
   };
 
   useEffect(() => {
-    if (appUser && appUser.uid) {
-        loadUserData(appUser);
-    }
+    if (appUser && appUser.uid) loadUserData(appUser);
   }, [appUser]);
 
   useEffect(() => {
@@ -257,15 +229,14 @@ const MathApp = () => {
     }
   }, [currentProfile, gameState]);
 
+  // ... (Giữ nguyên createProfile, saveData, handleSaveProfiles) ...
   const createProfile = async () => {
       if (!newProfileName.trim()) { showNotification('error', "Vui lòng nhập tên cho bé."); return; }
       const newProfile = { id: `profile_${Date.now()}`, name: newProfileName, avatar: newProfileAvatar };
       const updatedProfiles = [...profiles, newProfile];
       setProfiles(updatedProfiles);
-      
       const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
       await updateDoc(userDocRef, { profiles: updatedProfiles });
-      
       setNewProfileName(""); setIsCreatingProfile(false); setCurrentProfile(newProfile); 
       showNotification('success', `Đã tạo hồ sơ cho bé ${newProfileName}!`);
   };
@@ -288,17 +259,20 @@ const MathApp = () => {
             const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
             await updateDoc(userDocRef, { profiles: updatedProfiles });
             showNotification('success', "Đã cập nhật danh sách hồ sơ!");
-        } catch (e) {
-            showNotification('error', "Lỗi khi lưu danh sách hồ sơ.");
-        }
+        } catch (e) { showNotification('error', "Lỗi khi lưu danh sách hồ sơ."); }
     }
   };
 
+  // ✅ SỬA ĐỔI: Xóa cache khi lưu config mới
   const saveConfig = async (newConfig) => {
       if (!appUser || !currentProfile) { showNotification('error', "Chọn hồ sơ trước."); return; }
+      
       setConfig(newConfig);
       await saveData({ config: newConfig });
+      
+      // QUAN TRỌNG: Cấu hình đổi -> Bộ câu hỏi cũ không còn phù hợp -> Xóa Cache
       setPreloadedQuiz(null);
+      
       showNotification('success', "Đã lưu cấu hình!");
       setGameState('home');
   };
@@ -352,10 +326,9 @@ const MathApp = () => {
 
             // --- LOGIC SANITY CHECK (FIX LỖI UNDEFINED) ---
             if (processedQ.type === 'mcq' || processedQ.type === 'fill_blank' || processedQ.type === 'comparison') {
-                let correctVal = String(q.correctVal).replace(/["']/g, "").trim(); // Xóa ngoặc kép thừa nếu có
+                let correctVal = String(q.correctVal).replace(/["']/g, "").trim(); 
                 let options = Array.isArray(q.options) ? q.options : [];
 
-                // 1. Tự giải lại bài toán để lấy đáp án chuẩn (Ghi đè AI)
                 let computedVal = null;
                 if (processedQ.topic === 'finding_x' || processedQ.text.toLowerCase().includes('tìm x')) {
                     computedVal = solveEquation(processedQ.text);
@@ -370,67 +343,53 @@ const MathApp = () => {
                     processedQ.correctVal = correctVal;
                 }
 
-                // 2. Xử lý Options cho MCQ (Chống lỗi undefined)
                 if (processedQ.type === 'mcq') {
-                    // Bước 1: Lọc sạch rác ngay từ đầu
-                    options = options.map(o => String(o).trim())
-                                     .filter(o => o !== "" && o !== "undefined" && o !== "null");
-
-                    // Bước 2: Đảm bảo đáp án đúng có trong options
-                    // Nếu correctVal bị lỗi (là undefined/null), gán tạm giá trị mặc định để không crash
+                    options = options.map(o => String(o).trim()).filter(o => o !== "" && o !== "undefined" && o !== "null");
                     if (correctVal === "undefined" || correctVal === "null" || correctVal === "") {
-                        correctVal = "0"; // Giá trị fallback an toàn
-                        processedQ.correctVal = "0";
+                        correctVal = "0"; processedQ.correctVal = "0";
                     }
-
                     const hasCorrectOption = options.some(opt => normalizeVal(opt) === normalizeVal(correctVal));
-                    if (!hasCorrectOption) {
-                        options.unshift(correctVal); // Thêm vào đầu
-                    }
-                    
-                    // Bước 3: Fill đầy options nếu thiếu
+                    if (!hasCorrectOption) options.unshift(correctVal);
                     while(options.length < 4) {
-                        // Lấy số từ đáp án đúng để tạo số giả xung quanh
                         const valMatch = correctVal.match(/(\d+)/);
                         const baseVal = valMatch ? parseInt(valMatch[0]) : 50; 
                         let fakeNum = baseVal + Math.floor(Math.random() * 20) - 10;
                         if (fakeNum < 0) fakeNum = 0; 
-                        
-                        // Tránh trùng với đáp án đúng
                         if (fakeNum === baseVal) fakeNum = baseVal + 1;
-
                         const fakeOption = String(fakeNum);
                         if (!options.includes(fakeOption)) options.push(fakeOption);
                     }
-
-                    // Bước 4: Lọc LẠI một lần cuối cùng để chắc chắn không còn rác do quá trình sinh số gây ra
-                    processedQ.options = [...new Set(options)]
-                        .filter(o => o && String(o).trim() !== "undefined")
-                        .sort(() => Math.random() - 0.5);
-
+                    processedQ.options = [...new Set(options)].filter(o => o && String(o).trim() !== "undefined").sort(() => Math.random() - 0.5);
                 } else if (processedQ.type === 'comparison') {
                     processedQ.options = ['>', '=', '<'];
                 }
             }
-            
             return processedQ;
         });
     };
 
     try {
         const aiResult = await callGemini(aiPrompt);
+        
+        // Log lỗi từ Server nếu có (quan trọng để debug)
+        if (aiResult && aiResult.debug_error) {
+             console.error("🔥 CLOUD ERROR:", aiResult.message);
+             if (isBackground) return null; // Background fail thì thôi
+             throw new Error(aiResult.message || "Lỗi AI Server");
+        }
+
         if (aiResult && Array.isArray(aiResult) && aiResult.length > 0) {
             return processQuestions(aiResult.slice(0, 10));
         }
         throw new Error("Dữ liệu AI rỗng");
     } catch (e) {
-        console.warn(isBackground ? "Lỗi Preload:" : "Lỗi AI:", e);
+        console.warn(isBackground ? "Lỗi Preload (Không ảnh hưởng):" : "Lỗi AI:", e);
         if (isBackground) return null;
-        
         return processQuestions([...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, 10));
     }
   }, [currentProfile, userStats, config]);
 
+  // ✅ SỬA ĐỔI: Hàm Bắt đầu Quiz ưu tiên lấy Cache
   const handleStartQuiz = async () => {
       if (!currentProfile) { showNotification('error', "Vui lòng chọn hồ sơ!"); return; }
       if (config.selectedTopics.length === 0) { showNotification('error', "Chọn ít nhất 1 chủ đề!"); return; }
@@ -438,14 +397,18 @@ const MathApp = () => {
       setIsGenerating(true);
       setAppError(null);
 
+      // --- [TĂNG TỐC] Dùng hàng có sẵn (Instant Start) ---
       if (preloadedQuiz) {
+          console.log("⚡ [FAST START] Dùng bộ câu hỏi đã tải ngầm!");
           setQuizData(preloadedQuiz);
-          setPreloadedQuiz(null);
+          setPreloadedQuiz(null); // Xóa cache để lần sau nạp mới
           startSession();
           setIsGenerating(false);
           return;
       }
+      // ----------------------------------------------------
 
+      console.log("⏳ [NORMAL START] Không có cache, gọi API trực tiếp...");
       const questions = await generateQuizQuestions(false);
       setQuizData(questions);
       startSession();
@@ -458,116 +421,75 @@ const MathApp = () => {
       setGameState('playing'); setQuestionStartTime(Date.now());
   };
 
+  // ✅ SỬA ĐỔI: Kích hoạt tải ngầm ngay khi vào màn hình Result
   useEffect(() => {
       if (gameState === 'result' && currentProfile) {
           const preload = async () => {
-              const qs = await generateQuizQuestions(true);
-              if (qs) setPreloadedQuiz(qs);
+              console.log("🚀 [BACKGROUND] Bắt đầu tải ngầm câu hỏi cho ván sau...");
+              const qs = await generateQuizQuestions(true); // isBackground = true
+              if (qs) {
+                  console.log("✅ [BACKGROUND] Đã tải xong! Sẵn sàng phục vụ.");
+                  setPreloadedQuiz(qs);
+              }
           };
           preload();
       }
   }, [gameState, currentProfile, generateQuizQuestions]); 
 
+  // ... (Giữ nguyên các hàm handleSelectOption, handleNextQuestion, finishGame, redeemCash...) ...
   const handleSelectOption = (userAnswerData) => {
     if (isSubmitted) return;
     const timeTaken = Math.round((Date.now() - questionStartTime) / 1000);
-    
     let displayAnswer = userAnswerData;
-    if (typeof userAnswerData === 'object') {
-        displayAnswer = JSON.stringify(userAnswerData);
-    }
+    if (typeof userAnswerData === 'object') { displayAnswer = JSON.stringify(userAnswerData); }
     setSelectedOption(displayAnswer); 
-
     const currentQ = quizData[currentQIndex];
     let isCorrect = false;
-
     if (currentQ.type === 'sorting') {
         const userArr = Array.isArray(userAnswerData) ? userAnswerData : [];
         const correctArr = Array.isArray(currentQ.correctOrder) ? currentQ.correctOrder : [];
-        
-        if (userArr.length === correctArr.length) {
-            isCorrect = userArr.every((val, index) => normalizeVal(val) === normalizeVal(correctArr[index]));
-        }
-    } else if (currentQ.type === 'matching') {
-        isCorrect = userAnswerData === true; 
-    } else {
-        isCorrect = normalizeVal(userAnswerData) === normalizeVal(currentQ.correctVal);
-    }
-
+        if (userArr.length === correctArr.length) { isCorrect = userArr.every((val, index) => normalizeVal(val) === normalizeVal(correctArr[index])); }
+    } else if (currentQ.type === 'matching') { isCorrect = userAnswerData === true; 
+    } else { isCorrect = normalizeVal(userAnswerData) === normalizeVal(currentQ.correctVal); }
     let reward = 0;
-    if (isCorrect) { 
-        reward = REWARD_PER_LEVEL[currentQ.level] || 200; 
-        setSessionScore(prev => prev + reward); 
-    }
-    
-    setHistory(prev => [...prev, { 
-        ...currentQ, 
-        userAnswer: displayAnswer, 
-        isCorrect, 
-        reward, 
-        timeTaken 
-    }]);
+    if (isCorrect) { reward = REWARD_PER_LEVEL[currentQ.level] || 200; setSessionScore(prev => prev + reward); }
+    setHistory(prev => [...prev, { ...currentQ, userAnswer: displayAnswer, isCorrect, reward, timeTaken }]);
     setIsSubmitted(true);
   };
 
   const handleNextQuestion = () => {
-      if (currentQIndex < quizData.length - 1) { 
-          setCurrentQIndex(prev => prev + 1); 
-          setSelectedOption(null); setIsSubmitted(false); 
-          setQuestionStartTime(Date.now()); 
-      } else { 
-          finishGame(); 
-      } 
+      if (currentQIndex < quizData.length - 1) { setCurrentQIndex(prev => prev + 1); setSelectedOption(null); setIsSubmitted(false); setQuestionStartTime(Date.now()); 
+      } else { finishGame(); } 
   };
 
   const finishGame = async () => {
       const newPiggyBank = piggyBank + sessionScore;
       setPiggyBank(newPiggyBank);
       setGameState('result');
-      
       if (!appUser || appUser.isAnon) return; 
-
       try {
           let newStats = { ...userStats };
           if (!newStats[currentProfile.id]) newStats[currentProfile.id] = { total_questions: 0, total_correct: 0, topics: {} };
           let pStats = newStats[currentProfile.id];
-          
           history.forEach(q => {
               pStats.total_questions = (pStats.total_questions || 0) + 1;
               if (q.isCorrect) pStats.total_correct = (pStats.total_correct || 0) + 1;
               if (!pStats.topics) pStats.topics = {};
-              
               const topicId = TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || q.topic || 'arithmetic'; 
               if (!pStats.topics[topicId]) pStats.topics[topicId] = { total: 0, correct: 0 };
-              
               pStats.topics[topicId].total += 1;
               if (q.isCorrect) pStats.topics[topicId].correct += 1;
           });
-          
           setUserStats(newStats);
-
           const logEntry = {
-              id: crypto.randomUUID(), 
-              profileId: currentProfile.id,
-              timestamp: Date.now(),
-              score: sessionScore,
-              difficultyMode: config.difficultyMode,
-              semester: config.semester,
-              questions: history.map(h => ({
-                  text: h.text, userAnswer: h.userAnswer, correctOption: h.correctOption,
-                  correctVal: h.correctVal, explanation: h.explanation, isCorrect: h.isCorrect,
-                  topic: h.topic, level: h.level, timeTaken: h.timeTaken
-              })) 
+              id: crypto.randomUUID(), profileId: currentProfile.id, timestamp: Date.now(), score: sessionScore,
+              difficultyMode: config.difficultyMode, semester: config.semester,
+              questions: history.map(h => ({ text: h.text, userAnswer: h.userAnswer, correctOption: h.correctOption, correctVal: h.correctVal, explanation: h.explanation, isCorrect: h.isCorrect, topic: h.topic, level: h.level, timeTaken: h.timeTaken })) 
           };
-          
           const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
           const snap = await getDoc(userDocRef);
           const currentLogs = snap.exists() ? (snap.data().logs || []) : [];
-          
-          await updateDoc(userDocRef, { 
-              piggyBank: newPiggyBank, stats: newStats, logs: [...currentLogs, logEntry]
-          });
-          
+          await updateDoc(userDocRef, { piggyBank: newPiggyBank, stats: newStats, logs: [...currentLogs, logEntry] });
       } catch (error) { console.error("Lỗi lưu game:", error); }
   };
 
@@ -589,15 +511,7 @@ const MathApp = () => {
       switch (gameState) {
           case 'auth': return <AuthScreen onLoginSuccess={handleAppLogin} errorMsg={authError} setErrorMsg={setAuthError} />; 
           case 'profile_select': return <ProfileScreen profiles={profiles} setCurrentProfile={setCurrentProfile} isCreatingProfile={isCreatingProfile} setIsCreatingProfile={setIsCreatingProfile} newProfileName={newProfileName} setNewProfileName={setNewProfileName} newProfileAvatar={newProfileAvatar} setNewProfileAvatar={setNewProfileAvatar} createProfile={createProfile} appUser={appUser} />; 
-          case 'user_profile': 
-            return <UserProfileScreen 
-                appUser={appUser} 
-                setAppUser={setAppUser} 
-                setGameState={setGameState} 
-                onLogout={handleAppLogout}
-                profiles={profiles}
-                onSaveProfiles={handleSaveProfiles}
-            />; 
+          case 'user_profile': return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleAppLogout} profiles={profiles} onSaveProfiles={handleSaveProfiles} />; 
           case 'home': return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} isAuthReady={isAuthReady} />; 
           case 'playing': return <React.Suspense fallback={<div className="flex items-center justify-center h-full"><Loader className="animate-spin"/></div>}><QV quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} /></React.Suspense>;
           case 'result': return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
@@ -615,6 +529,13 @@ const MathApp = () => {
       <div className="w-full h-full max-w-md bg-white shadow-2xl overflow-hidden relative flex flex-col sm:rounded-[2.5rem] sm:h-[95vh] sm:border-[8px] sm:border-slate-200">
         <React.Suspense fallback={<div className="flex items-center justify-center h-full"><Loader className="animate-spin text-indigo-500"/></div>}>{getScreenComponent()}</React.Suspense>
         
+        {/* Nút debug nhỏ để bạn biết khi nào Cache sẵn sàng */}
+        {gameState === 'home' && preloadedQuiz && (
+            <div className="absolute top-24 right-6 text-[10px] font-bold text-green-500 bg-green-100 px-2 py-1 rounded-full flex items-center gap-1 animate-fade-in">
+                ⚡ Sẵn sàng
+            </div>
+        )}
+
         {appError && (
             <div className="absolute top-10 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl z-50 flex items-center shadow-lg animation-fade-in">
                 <WifiOff size={20} className="mr-2" />
