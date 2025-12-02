@@ -28,16 +28,27 @@ export const normalizeVal = (val) => {
     return str;
 };
 
+// --- HÀM HELPER CHUẨN HÓA DẤU SO SÁNH (Đã có sẵn trong mã gốc bạn cung cấp cho lần chỉnh sửa này) ---
+export const normalizeComparisonSymbol = (val) => {
+    const v = String(val).toLowerCase().trim();
+    if (v === 'bằng nhau' || v === 'bằng' || v === 'equal' || v === '=') return '=';
+    if (v.includes('lớn') || v === 'greater' || v === '>') return '>';
+    if (v.includes('bé') || v.includes('nhỏ') || v === 'less' || v === '<') return '<';
+    return v;
+};
+
 export const solveSimpleExpression = (text) => {
     try {
         const clean = text.toLowerCase()
             .replace(/x/g, '*')
             .replace(/×/g, '*')
             .replace(/:/g, '/')
-            .replace(/÷/g, '/');
+            .replace(/÷/g, '/')
+            .replace(/của/g, '*') // ✅ THÊM: Xử lý "1/2 của 60"
+            .replace(/,/g, '.'); // ✅ THÊM: Xử lý dấu phẩy thập phân VN
 
         const result = evaluate(clean);
-        return (isFinite(result) && !isNaN(result)) ? Math.round(result) : null; 
+        return (isFinite(result) && !isNaN(result)) ? parseFloat(result.toFixed(2)) : null; 
     } catch {
         return null;
     }
@@ -55,25 +66,23 @@ export const solveEquation = (text) => {
             .replace(/×/g, '*')
             .replace(/x/g, '*') // Lưu ý: 'x' ở đây có thể là dấu nhân nếu AI viết thường
             .replace(/÷/g, '/')
+            .replace(/của/g, '*') // ✅ THÊM
             .trim();
 
-        // 2. Tìm biến số (x, y, hoặc ? hoặc __)
-        // Quy ước tạm: biến số sẽ được thay thế placeholder để regex
-        // Tuy nhiên, logic đơn giản nhất cho lớp 3 là tách 2 vế dấu bằng
+        // 2. Tách 2 vế dấu bằng
         const sides = clean.split('=');
         if (sides.length !== 2) return null;
 
         const left = sides[0].trim();
         const right = sides[1].trim(); // Vế phải thường là kết quả (số)
 
-        // Tính giá trị vế phải (phòng trường hợp vế phải là biểu thức: x + 5 = 10 + 2)
+        // Tính giá trị vế phải
         const rightVal = evaluate(right);
         if (!isFinite(rightVal)) return null;
 
         // Phân tích vế trái: Chứa biến (tạm gọi là x) và 1 phép tính
-        // Các dạng: x + a, a + x, x - a, a - x, x * a, a * x, x / a, a / x
-        // Regex tìm số trong vế trái
-        const numMatch = left.match(/(\d+)/);
+        // Regex tìm số trong vế trái (Hỗ trợ số thập phân)
+        const numMatch = left.match(/(\d+(\.\d+)?)/); 
         if (!numMatch) return null;
         const a = parseFloat(numMatch[0]);
 
@@ -83,7 +92,6 @@ export const solveEquation = (text) => {
             return rightVal - a;
         } else if (left.includes('-')) {
             // Kiểm tra vị trí của biến. 
-            // Nếu số đứng trước dấu - (a - ...)
             const indexNum = left.indexOf(numMatch[0]);
             const indexOp = left.indexOf('-');
             if (indexNum < indexOp) {
@@ -134,11 +142,9 @@ export const solveComparison = (text) => {
                 .replace(/×/g, '*')
                 .replace(/:/g, '/')
                 .replace(/÷/g, '/')
+                .replace(/của/g, '*') // ✅ THÊM
                 .trim();
             
-            if (/^\d+$/.test(clean)) return parseInt(clean);
-            if (!clean) return null;
-
             try {
                 return evaluate(clean);
             } catch {
@@ -153,7 +159,7 @@ export const solveComparison = (text) => {
 
         if (val1 > val2) return '>';
         if (val1 < val2) return '<';
-        return '=';
+        return '='; // Trả về symbol chuẩn
     } catch { 
         return null;
     }

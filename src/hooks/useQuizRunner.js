@@ -1,7 +1,14 @@
 import { useState, useCallback } from 'react';
 import { callGemini } from '../lib/gemini';
-import { solveEquation, solveComparison, solveSimpleExpression, normalizeVal } from '../lib/utils';
+import { 
+    solveEquation, 
+    solveComparison, 
+    solveSimpleExpression, 
+    normalizeVal,
+    normalizeComparisonSymbol // Import hàm mới
+} from '../lib/utils';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, BACKUP_QUESTIONS, REWARD_PER_LEVEL } from '../lib/constants';
+import { evaluate } from 'mathjs';
 
 // Helper tạo ràng buộc ngẫu nhiên
 const getRandomConstraints = () => {
@@ -31,7 +38,6 @@ export const useQuizRunner = (currentProfile, config) => {
     const [isGenerating, setIsGenerating] = useState(false);
     const [preloadedQuiz, setPreloadedQuiz] = useState(null);
 
-    // AI Logic Generator
     const generateQuizQuestions = useCallback(async (isBackground = false) => {
         if (!currentProfile) return null;
 
@@ -51,7 +57,6 @@ export const useQuizRunner = (currentProfile, config) => {
         OUTPUT JSON SCHEMA.
         `;
 
-        // --- Helper process questions ---
         const processQuestions = (questions) => {
             return questions.map((q, idx) => {
                 let processedQ = {
@@ -60,83 +65,109 @@ export const useQuizRunner = (currentProfile, config) => {
                     type: q.type || 'mcq'
                 };
                 
-                // 1. FIX Sorting (Giữ nguyên từ lần sửa trước)
+                // --- FIX SORTING ---
                 if (processedQ.type === 'sorting') {
-                    if ((!processedQ.items || processedQ.items.length === 0) && processedQ.correctOrder) {
-                        processedQ.items = [...processedQ.correctOrder].sort(() => Math.random() - 0.5);
-                    }
-                    if ((!processedQ.items || processedQ.items.length === 0)) {
-                        const numbers = processedQ.text.match(/\d+/g); 
-                        if (numbers && numbers.length >= 2) {
-                            const sortedNums = [...numbers].sort((a, b) => parseFloat(a) - parseFloat(b));
-                            processedQ.correctOrder = sortedNums;
-                            processedQ.items = [...numbers].sort(() => Math.random() - 0.5);
+                    if (!processedQ.items || processedQ.items.length === 0) {
+                        let foundItems = processedQ.text.match(/\d+\s*\/\s*\d+/g);
+                        if (!foundItems || foundItems.length < 2) {
+                            foundItems = processedQ.text.match(/-?\d+(\.\d+)?/g);
                         }
+                        if (foundItems && foundItems.length >= 2) {
+                            processedQ.items = foundItems;
+                        }
+                    }
+
+                    if (processedQ.items && processedQ.items.length > 0 && (!processedQ.correctOrder || processedQ.correctOrder.length === 0)) {
+                        try {
+                            const sorted = [...processedQ.items].sort((a, b) => {
+                                const valA = evaluate(String(a).replace(',', '.'));
+                                const valB = evaluate(String(b).replace(',', '.'));
+                                const isDescending = processedQ.text.toLowerCase().includes('giảm');
+                                return isDescending ? valB - valA : valA - valB;
+                            });
+                            processedQ.correctOrder = sorted;
+                        } catch (e) {
+                            console.warn("Lỗi tính toán Sorting:", e);
+                            processedQ.correctOrder = processedQ.items.sort(); 
+                        }
+                    }
+                    if (processedQ.items) {
+                        processedQ.items = [...processedQ.items].sort(() => Math.random() - 0.5);
                     }
                 }
 
-                // 2. ✅ FIX TRIỆT ĐỂ CHO MATCHING
+                // --- ✅ FIX TRIỆT ĐỂ MATCHING ---
                 if (processedQ.type === 'matching') {
-                    // Nếu thiếu pairs, tự động khôi phục từ text
                     if (!processedQ.pairs || processedQ.pairs.length === 0) {
                         try {
-                            // Bước A: Tách 2 vế dựa vào từ khóa "với" (hoặc with/and)
-                            const splitParts = processedQ.text.split(/\s+với\s+|\s+with\s+|\s+and\s+/i);
+                            // 1. Cố gắng tách 2 vế bằng từ khóa mạnh "Kết quả:" hoặc "Đáp án:"
+                            let splitParts = processedQ.text.split(/(?:\.\s*|\n)(?:Kết quả|Đáp án|Cột phải|Result|Answer):/i);
                             
-                            if (splitParts.length >= 2) {
-                                // Hàm làm sạch từng mục (Bỏ "A)", "1.", "Nối..." và khoảng trắng)
-                                const cleanItem = (str) => {
-                                    return str
-                                        .replace(/^Nối.*?:/i, '') // Bỏ đoạn intro "Nối..."
-                                        .replace(/^\s*[A-Za-z0-9]+[).:]\s*/, '') // Bỏ label A), 1.
-                                        .trim();
-                                };
-
-                                // Tách dấu phẩy và làm sạch
-                                const leftRaw = splitParts[0].split(',').map(cleanItem).filter(Boolean);
-                                const rightRaw = splitParts[1].split(',').map(cleanItem).filter(Boolean);
-
-                                // Bước B: Ghép cặp thông minh (Tính toán vế trái -> Tìm vế phải tương ứng)
-                                const newPairs = [];
+                            // Nếu không có từ khóa, fallback về tách dòng hoặc tách "với" (cẩn thận)
+                            if (splitParts.length < 2) {
+                                const hasABCD = /[A-D]\)/.test(processedQ.text);
+                                const has1234 = /[1-4]\)/.test(processedQ.text);
                                 
-                                leftRaw.forEach(leftExpr => {
-                                    // Thử giải biểu thức bên trái (vd: "45 x 2" -> 90)
-                                    const solvedLeft = solveSimpleExpression(leftExpr);
-                                    
-                                    if (solvedLeft !== null) {
-                                        // Tìm giá trị tương ứng ở vế phải (vd: "90")
-                                        // normalizeVal giúp so sánh an toàn ("90" == 90)
-                                        const matchRight = rightRaw.find(r => {
-                                            // Thử giải cả vế phải (đề phòng vế phải cũng là phép tính 80+10)
-                                            const solvedRight = solveSimpleExpression(r);
-                                            const valRight = solvedRight !== null ? solvedRight : r;
-                                            return normalizeVal(valRight) === normalizeVal(solvedLeft);
-                                        });
-
-                                        if (matchRight) {
-                                            newPairs.push({ left: leftExpr, right: matchRight });
-                                        }
-                                    }
-                                });
-
-                                // Nếu tìm được cặp, gán lại vào câu hỏi
-                                if (newPairs.length > 0) {
-                                    processedQ.pairs = newPairs;
+                                if (hasABCD && has1234) {
+                                    // Tự tạo 2 phần giả để regex bên dưới xử lý (Scan toàn bộ text)
+                                    splitParts = [processedQ.text, processedQ.text]; 
+                                } else {
+                                    const withSplit = processedQ.text.split(/\s+với\s+(?=[0-9A-Z])/i);
+                                    if (withSplit.length >= 2) splitParts = withSplit;
                                 }
                             }
+
+                            // 2. Trích xuất item bằng Regex mạnh
+                            const extractItems = (str, pattern) => {
+                                const matches = str.match(pattern);
+                                if (!matches) return [];
+                                return matches.map(m => m.replace(/^[A-Z0-9]+\s*[).:-]\s*/i, '').trim());
+                            };
+
+                            let leftRaw = [], rightRaw = [];
+
+                            if (splitParts.length >= 2) {
+                                const abcdPattern = /[A-D]\s*[).:-]\s*[^,;\n]+/g; // Bắt A) 10 + 20
+                                const numPattern = /[1-4]\s*[).:-]\s*[^,;\n]+/g; // Bắt 1) 30
+                                
+                                // Nếu splitParts[1] chứa nội dung Result/Answer:
+                                leftRaw = extractItems(splitParts[0], abcdPattern) || extractItems(splitParts[0], numPattern);
+                                rightRaw = extractItems(splitParts[splitParts.length - 1], numPattern) || extractItems(splitParts[splitParts.length - 1], abcdPattern);
+
+                                // Nếu một bên không có, thử scan toàn bộ text
+                                if (leftRaw.length === 0) leftRaw = extractItems(processedQ.text, abcdPattern) || extractItems(processedQ.text, numPattern); 
+                                if (rightRaw.length === 0) rightRaw = extractItems(processedQ.text, numPattern) || extractItems(processedQ.text, abcdPattern);
+                            }
+
+                            // 3. Ghép cặp
+                            const newPairs = [];
+                            leftRaw.forEach(leftExpr => {
+                                const solvedLeft = solveSimpleExpression(leftExpr);
+                                if (solvedLeft !== null) {
+                                    const matchRight = rightRaw.find(r => {
+                                        const solvedRight = solveSimpleExpression(r);
+                                        const valRight = solvedRight !== null ? solvedRight : r;
+                                        return normalizeVal(valRight) === normalizeVal(solvedLeft);
+                                    });
+                                    if (matchRight) newPairs.push({ left: leftExpr, right: matchRight });
+                                }
+                            });
+
+                            if (newPairs.length > 0) processedQ.pairs = newPairs;
                         } catch (e) {
                             console.warn("Lỗi khôi phục Matching:", e);
                         }
                     }
                 }
 
-                // 3. Logic MCQ cũ
+                // 3. Logic MCQ/Comparison
                 if (processedQ.type === 'mcq' || processedQ.type === 'fill_blank' || processedQ.type === 'comparison') {
                     let computedVal = null;
                     if (processedQ.topic === 'finding_x' || processedQ.text.toLowerCase().includes('tìm x')) {
                         computedVal = solveEquation(processedQ.text);
                     } else if (processedQ.type === 'comparison') {
-                        computedVal = solveComparison(processedQ.text);
+                        // Tính toán giá trị so sánh (> < =)
+                        computedVal = solveComparison(processedQ.text); 
                     } else if (processedQ.topic === 'arithmetic' || processedQ.topic === 'expressions') {
                         computedVal = solveSimpleExpression(processedQ.text);
                     }
@@ -159,7 +190,6 @@ export const useQuizRunner = (currentProfile, config) => {
         }
     }, [currentProfile, config]);
 
-    // Actions
     const startSession = (questions) => {
         setQuizData(questions);
         setCurrentQIndex(0); setSessionScore(0); setHistory([]);
@@ -180,10 +210,14 @@ export const useQuizRunner = (currentProfile, config) => {
             const userArr = Array.isArray(userAnswerData) ? userAnswerData : [];
             const correctArr = currentQ.correctOrder || [];
             if (userArr.length === correctArr.length) {
+                // Sử dụng normalizeVal để so sánh an toàn (bỏ qua khác biệt chuỗi/số, dấu cách)
                 isCorrect = userArr.every((val, index) => normalizeVal(val) === normalizeVal(correctArr[index]));
             }
         } else if (currentQ.type === 'matching') {
             isCorrect = userAnswerData === true;
+        } else if (currentQ.type === 'comparison') {
+            // ✅ FIX: So sánh so sánh (Symbol vs Text)
+            isCorrect = normalizeComparisonSymbol(userAnswerData) === normalizeComparisonSymbol(currentQ.correctVal);
         } else {
             isCorrect = normalizeVal(userAnswerData) === normalizeVal(currentQ.correctVal);
         }
