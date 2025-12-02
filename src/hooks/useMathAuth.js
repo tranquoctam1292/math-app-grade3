@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-    signInAnonymously, onAuthStateChanged, signInWithCustomToken, signOut 
+    onAuthStateChanged, signInWithCustomToken, signOut 
 } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { auth, db, appId } from '../lib/firebase';
@@ -16,16 +16,17 @@ export const useMathAuth = () => {
         const initSystemAuth = async () => {
             if (!auth) return;
             try {
+                // Kiểm tra token từ biến môi trường (dùng cho test/dev nếu có)
                 const initialAuthToken = import.meta.env.VITE_INITIAL_AUTH_TOKEN;
                 if (initialAuthToken) { 
                     await signInWithCustomToken(auth, initialAuthToken); 
-                } else if (!auth.currentUser) { 
-                    await signInAnonymously(auth); 
-                }
+                } 
+                
+                // ❌ ĐÃ SỬA: Xoá bỏ đoạn tự động signInAnonymously ở đây.
+                // Việc đăng nhập (kể cả ẩn danh) phải do người dùng kích hoạt từ AuthScreen.
+                
             } catch (e) {
                 console.error("Lỗi Auth Init:", e);
-                // Fallback nếu lỗi
-                if (!auth.currentUser) await signInAnonymously(auth);
             }
         };
 
@@ -38,23 +39,31 @@ export const useMathAuth = () => {
                 if (savedSession) {
                     try {
                         const parsedUser = JSON.parse(savedSession);
-                        // Đảm bảo UID luôn đúng với phiên hiện tại
-                        // CHỈNH SỬA TẠI ĐÂY: Luôn sử dụng u.uid
+                        // Đảm bảo UID luôn đúng với phiên hiện tại của Firebase
                         const finalUid = u.uid; 
-                        
                         setAppUser({ ...parsedUser, uid: finalUid });
                     } catch { 
+                        // Nếu JSON lỗi, thử fallback
                         localStorage.removeItem('math_app_user_session'); 
+                        if (u.isAnonymous) {
+                            setAppUser({ uid: u.uid, isAnon: true });
+                        }
                     }
                 } else {
-                    // Nếu không có session lưu, coi như user ẩn danh mới
+                    // Nếu Firebase nhớ user (do persistence) nhưng localStorage mất (xoá cache)
+                    // Ta vẫn khôi phục lại trạng thái đăng nhập
                     if (u.isAnonymous) {
                         setAppUser({ uid: u.uid, isAnon: true });
                     }
+                    // Lưu ý: Nếu user là Google/Email login mà mất localStorage, 
+                    // họ sẽ cần login lại để lấy lại thông tin userAccount đầy đủ (tên, avatar...),
+                    // hoặc bạn có thể fetch lại từ Firestore ở đây nếu muốn.
                 }
             } else {
+                // Không có user (đã logout hoặc chưa login) -> AppUser = null
                 setAppUser(null);
             }
+            // Đánh dấu hệ thống Auth đã sẵn sàng
             setIsAuthReady(true);
         });
 
@@ -62,6 +71,7 @@ export const useMathAuth = () => {
     }, []);
 
     // Hàm Login (Xử lý logic device limit & merge user)
+    // Hàm này được gọi SAU KHI Firebase đã sign-in thành công (bởi AuthScreen)
     const login = async (userAccount) => {
         const deviceId = getDeviceId();
         let devices = userAccount.devices || [];
@@ -71,12 +81,19 @@ export const useMathAuth = () => {
             if (!devices.includes(deviceId)) {
                 if (devices.length >= 3) {
                     setAuthError("Tài khoản đã đăng nhập quá 3 thiết bị.");
+                    // Nếu vượt quá giới hạn, sign out ngay lập tức
+                    await signOut(auth);
                     return false;
                 } else {
                     devices.push(deviceId);
-                    const accountId = encodeEmail(userAccount.email);
-                    const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
-                    await updateDoc(accountRef, { devices });
+                    try {
+                        const accountId = encodeEmail(userAccount.email);
+                        const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
+                        await updateDoc(accountRef, { devices });
+                    } catch (e) {
+                        console.warn("Lỗi cập nhật thiết bị:", e);
+                        // Không chặn login nếu lỗi cập nhật Firestore phụ
+                    }
                 }
             }
         } else {
@@ -97,6 +114,7 @@ export const useMathAuth = () => {
             await signOut(auth);
             setAppUser(null);
             localStorage.removeItem('math_app_user_session');
+            localStorage.removeItem('math_app_last_profile_id'); // Xoá luôn nhớ profile để sạch sẽ
             return true;
         } catch (e) {
             console.error("Lỗi Logout:", e);
