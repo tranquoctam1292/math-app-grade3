@@ -85,6 +85,27 @@ const MathApp = () => {
         }
     }, [appUser, isAuthReady, gameState]);
 
+    // --- CẬP NHẬT: Logic tự động chọn lại Profile cũ ---
+    useEffect(() => {
+        // Chỉ chạy khi đã tải xong dữ liệu và chưa chọn profile nào
+        if (!isLoadingData && profiles.length > 0 && !currentProfile && gameState === 'profile_select') {
+            const lastProfileId = localStorage.getItem('math_app_last_profile_id');
+            if (lastProfileId) {
+                const foundProfile = profiles.find(p => p.id === lastProfileId);
+                if (foundProfile) {
+                    console.log("Auto restoring profile:", foundProfile.name);
+                    
+                    // ✅ FIX: Dùng setTimeout để đẩy việc update state ra khỏi luồng render hiện tại
+                    // Điều này giúp tránh lỗi "set-state-in-effect" của ESLint
+                    setTimeout(() => {
+                        setCurrentProfile(foundProfile);
+                        setGameState('home');
+                    }, 0);
+                }
+            }
+        }
+    }, [isLoadingData, profiles, currentProfile, gameState]);
+
     // --- EFFECT: Background Preloading ---
     const { generateQuizQuestions, setPreloadedQuiz } = gameRunner;
     useEffect(() => {
@@ -113,9 +134,11 @@ const MathApp = () => {
     };
 
     // Hàm wrapper để vừa set profile vừa chuyển màn hình
+    // --- CẬP NHẬT 2: Lưu profile id khi chọn ---
     const handleSelectProfile = (profile) => {
+        localStorage.setItem('math_app_last_profile_id', profile.id); // <--- LƯU LẠI
         setCurrentProfile(profile);
-        setGameState('home'); // <--- Thêm dòng này để chuyển vào màn hình chính
+        setGameState('home');
     };
 
     const handleStartQuiz = async () => {
@@ -227,7 +250,7 @@ const MathApp = () => {
             case 'profile_select': 
                 return <ProfileScreen 
                     profiles={profiles} 
-                    setCurrentProfile={handleSelectProfile} // <--- ĐÃ THAY ĐỔI
+                    setCurrentProfile={handleSelectProfile} 
                     isCreatingProfile={isCreatingProfile} 
                     setIsCreatingProfile={setIsCreatingProfile} 
                     newProfileName={newProfileName} 
@@ -236,6 +259,7 @@ const MathApp = () => {
                     setNewProfileAvatar={setNewProfileAvatar} 
                     createProfile={createProfileWrapper} 
                     appUser={appUser} 
+                    isLoading={isLoadingData} // <--- TRUYỀN PROP NÀY VÀO
                 />;
             case 'home': 
                 return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={gameRunner.isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} />;

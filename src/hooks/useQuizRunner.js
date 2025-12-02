@@ -3,7 +3,7 @@ import { callGemini } from '../lib/gemini';
 import { solveEquation, solveComparison, solveSimpleExpression, normalizeVal } from '../lib/utils';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, BACKUP_QUESTIONS, REWARD_PER_LEVEL } from '../lib/constants';
 
-// Helper tạo ràng buộc ngẫu nhiên (Giữ nguyên)
+// Helper tạo ràng buộc ngẫu nhiên
 const getRandomConstraints = () => {
     const constraints = [
         "Ưu tiên sử dụng các số lẻ trong phép tính.",
@@ -51,7 +51,7 @@ export const useQuizRunner = (currentProfile, config) => {
         OUTPUT JSON SCHEMA.
         `;
 
-        // --- Helper process questions (ĐÃ CẬP NHẬT LOGIC FIX LỖI MATCHING) ---
+        // --- Helper process questions ---
         const processQuestions = (questions) => {
             return questions.map((q, idx) => {
                 let processedQ = {
@@ -60,7 +60,7 @@ export const useQuizRunner = (currentProfile, config) => {
                     type: q.type || 'mcq'
                 };
                 
-                // 1. FIX Sorting (Code cũ của bạn)
+                // 1. FIX Sorting (Giữ nguyên từ lần sửa trước)
                 if (processedQ.type === 'sorting') {
                     if ((!processedQ.items || processedQ.items.length === 0) && processedQ.correctOrder) {
                         processedQ.items = [...processedQ.correctOrder].sort(() => Math.random() - 0.5);
@@ -75,51 +75,62 @@ export const useQuizRunner = (currentProfile, config) => {
                     }
                 }
 
-                // 2. ✅ FIX MỚI CHO MATCHING: Tự động khôi phục pairs từ text nếu thiếu
+                // 2. ✅ FIX TRIỆT ĐỂ CHO MATCHING
                 if (processedQ.type === 'matching') {
+                    // Nếu thiếu pairs, tự động khôi phục từ text
                     if (!processedQ.pairs || processedQ.pairs.length === 0) {
                         try {
-                            // Regex tìm pattern: "A) 1+1" hoặc "1) 1+1" trong text
-                            // Tách text làm 2 phần dựa vào chữ "với" (tiếng Việt) hoặc "with"
-                            const parts = processedQ.text.split(/với|with|and/i);
-                            if (parts.length >= 2) {
-                                // Tìm tất cả các biểu thức hoặc số ở vế trái (A, B, C, D)
-                                const leftMatches = parts[0].match(/[A-Za-z0-9]+\)\s*([^,]+)/g);
-                                // Tìm tất cả kết quả ở vế phải (1, 2, 3, 4)
-                                const rightMatches = parts[1].match(/[A-Za-z0-9]+\)\s*([^,]+)/g);
+                            // Bước A: Tách 2 vế dựa vào từ khóa "với" (hoặc with/and)
+                            const splitParts = processedQ.text.split(/\s+với\s+|\s+with\s+|\s+and\s+/i);
+                            
+                            if (splitParts.length >= 2) {
+                                // Hàm làm sạch từng mục (Bỏ "A)", "1.", "Nối..." và khoảng trắng)
+                                const cleanItem = (str) => {
+                                    return str
+                                        .replace(/^Nối.*?:/i, '') // Bỏ đoạn intro "Nối..."
+                                        .replace(/^\s*[A-Za-z0-9]+[).:]\s*/, '') // Bỏ label A), 1.
+                                        .trim();
+                                };
 
-                                if (leftMatches && rightMatches) {
-                                    const cleanVal = (str) => str.replace(/^[A-Za-z0-9]+\)\s*/, '').trim();
+                                // Tách dấu phẩy và làm sạch
+                                const leftRaw = splitParts[0].split(',').map(cleanItem).filter(Boolean);
+                                const rightRaw = splitParts[1].split(',').map(cleanItem).filter(Boolean);
+
+                                // Bước B: Ghép cặp thông minh (Tính toán vế trái -> Tìm vế phải tương ứng)
+                                const newPairs = [];
+                                
+                                leftRaw.forEach(leftExpr => {
+                                    // Thử giải biểu thức bên trái (vd: "45 x 2" -> 90)
+                                    const solvedLeft = solveSimpleExpression(leftExpr);
                                     
-                                    const lefts = leftMatches.map(cleanVal);
-                                    const rights = rightMatches.map(cleanVal);
-                                    
-                                    // Logic ghép cặp thông minh: Tính toán vế trái để tìm vế phải tương ứng
-                                    const newPairs = [];
-                                    lefts.forEach(leftExpr => {
-                                        const solvedVal = solveSimpleExpression(leftExpr); // Tính toán: "11 + 19" -> 30
-                                        if (solvedVal !== null) {
-                                            // Tìm kết quả trong danh sách rights
-                                            const matchingRight = rights.find(r => normalizeVal(r) === normalizeVal(solvedVal));
-                                            if (matchingRight) {
-                                                newPairs.push({ left: leftExpr, right: matchingRight });
-                                            }
+                                    if (solvedLeft !== null) {
+                                        // Tìm giá trị tương ứng ở vế phải (vd: "90")
+                                        // normalizeVal giúp so sánh an toàn ("90" == 90)
+                                        const matchRight = rightRaw.find(r => {
+                                            // Thử giải cả vế phải (đề phòng vế phải cũng là phép tính 80+10)
+                                            const solvedRight = solveSimpleExpression(r);
+                                            const valRight = solvedRight !== null ? solvedRight : r;
+                                            return normalizeVal(valRight) === normalizeVal(solvedLeft);
+                                        });
+
+                                        if (matchRight) {
+                                            newPairs.push({ left: leftExpr, right: matchRight });
                                         }
-                                    });
-                                    
-                                    // Nếu khôi phục được ít nhất 2 cặp -> Gán vào câu hỏi
-                                    if (newPairs.length >= 2) {
-                                        processedQ.pairs = newPairs;
                                     }
+                                });
+
+                                // Nếu tìm được cặp, gán lại vào câu hỏi
+                                if (newPairs.length > 0) {
+                                    processedQ.pairs = newPairs;
                                 }
                             }
                         } catch (e) {
-                            console.warn("Lỗi khôi phục matching pairs:", e);
+                            console.warn("Lỗi khôi phục Matching:", e);
                         }
                     }
                 }
 
-                // 3. Logic MCQ cũ (giữ nguyên)
+                // 3. Logic MCQ cũ
                 if (processedQ.type === 'mcq' || processedQ.type === 'fill_blank' || processedQ.type === 'comparison') {
                     let computedVal = null;
                     if (processedQ.topic === 'finding_x' || processedQ.text.toLowerCase().includes('tìm x')) {
@@ -148,7 +159,7 @@ export const useQuizRunner = (currentProfile, config) => {
         }
     }, [currentProfile, config]);
 
-    // ... (Phần còn lại giữ nguyên)
+    // Actions
     const startSession = (questions) => {
         setQuizData(questions);
         setCurrentQIndex(0); setSessionScore(0); setHistory([]);

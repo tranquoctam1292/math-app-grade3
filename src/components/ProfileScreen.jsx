@@ -1,15 +1,16 @@
 import React from 'react';
-import { User, UserPlus, LogOut, XCircle, CheckCircle } from 'lucide-react';
+import { User, UserPlus, XCircle, CheckCircle } from 'lucide-react'; 
 import { ClayButton } from '../lib/helpers';
 
-const ProfileScreen = ({ profiles, setCurrentProfile, isCreatingProfile, setIsCreatingProfile, newProfileName, setNewProfileName, newProfileAvatar, setNewProfileAvatar, createProfile, appUser }) => {
+// ✅ Thêm prop `isLoading` vào danh sách props
+const ProfileScreen = ({ profiles, setCurrentProfile, isCreatingProfile, setIsCreatingProfile, newProfileName, setNewProfileName, newProfileAvatar, setNewProfileAvatar, createProfile, appUser, isLoading }) => {
     
-    // Nếu chưa có profile nào, tự động mở modal tạo mới (trải nghiệm người dùng tốt hơn)
     React.useEffect(() => {
-        if (profiles.length === 0 && !isCreatingProfile) {
+        // ✅ FIX: Chỉ tự động mở modal khi KHÔNG tải dữ liệu (isLoading = false) VÀ danh sách rỗng
+        if (!isLoading && profiles.length === 0 && !isCreatingProfile) {
             setIsCreatingProfile(true);
         }
-    }, [profiles, isCreatingProfile, setIsCreatingProfile]);
+    }, [profiles, isCreatingProfile, setIsCreatingProfile, isLoading]);
 
     return (
         <div className="flex flex-col h-full bg-slate-50 p-6 relative">
@@ -25,32 +26,37 @@ const ProfileScreen = ({ profiles, setCurrentProfile, isCreatingProfile, setIsCr
                 )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 overflow-y-auto pb-20 no-scrollbar">
-                {profiles.map(profile => (
+            {/* ✅ FIX: Hiển thị Skeleton hoặc Loading khi đang tải */}
+            {isLoading ? (
+                <div className="text-center text-slate-400 font-bold mt-10">Đang tải hồ sơ...</div>
+            ) : (
+                <div className="grid grid-cols-2 gap-4 overflow-y-auto pb-20 no-scrollbar">
+                    {profiles.map(profile => (
+                        <ClayButton 
+                            key={profile.id} 
+                            onClick={() => setCurrentProfile(profile)} 
+                            className="aspect-square flex flex-col items-center justify-center gap-2 bg-white !rounded-3xl border-slate-100"
+                        >
+                            <div className="text-5xl drop-shadow-sm">{profile.avatar}</div>
+                            <div className="font-black text-slate-700 text-lg truncate w-full px-2">{profile.name}</div>
+                        </ClayButton>
+                    ))}
+                    
+                    {/* Nút tạo mới */}
                     <ClayButton 
-                        key={profile.id} 
-                        onClick={() => setCurrentProfile(profile)} 
-                        className="aspect-square flex flex-col items-center justify-center gap-2 bg-white !rounded-3xl border-slate-100"
+                        onClick={() => setIsCreatingProfile(true)} 
+                        colorClass="bg-emerald-500 text-white border-emerald-600"
+                        className="aspect-square flex flex-col items-center justify-center gap-2 !rounded-3xl"
                     >
-                        <div className="text-5xl drop-shadow-sm">{profile.avatar}</div>
-                        <div className="font-black text-slate-700 text-lg truncate w-full px-2">{profile.name}</div>
+                        <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
+                            <UserPlus size={32} className="text-white"/>
+                        </div>
+                        <div className="font-black text-white text-lg">Tạo mới</div>
                     </ClayButton>
-                ))}
-                
-                {/* Nút tạo mới - Emerald Color */}
-                <ClayButton 
-                    onClick={() => setIsCreatingProfile(true)} 
-                    colorClass="bg-emerald-500 text-white border-emerald-600"
-                    className="aspect-square flex flex-col items-center justify-center gap-2 !rounded-3xl"
-                >
-                    <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
-                        <UserPlus size={32} className="text-white"/>
-                    </div>
-                    <div className="font-black text-white text-lg">Tạo mới</div>
-                </ClayButton>
-            </div>
+                </div>
+            )}
 
-            {/* MODAL OVERLAY TẠO PROFILE */}
+            {/* MODAL OVERLAY TẠO PROFILE (Giữ nguyên phần dưới) */}
             {isCreatingProfile && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animation-fade-in">
                     <div className="bg-white p-6 rounded-[2rem] shadow-2xl w-full max-w-sm relative animate-shake">
@@ -79,13 +85,13 @@ const ProfileScreen = ({ profiles, setCurrentProfile, isCreatingProfile, setIsCr
                             <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Chọn ảnh đại diện</label>
                             <div className="flex gap-2 justify-center flex-wrap">
                                 {['🐶', '🐱', '🦊', 'bq', '🦄', '🐯'].map(avatar => (
-                                     <button 
-                                        key={avatar} 
-                                        onClick={() => setNewProfileAvatar(avatar)} 
-                                        className={`text-3xl w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${newProfileAvatar === avatar ? 'bg-indigo-100 ring-2 ring-indigo-500 scale-110' : 'bg-slate-50'}`}
-                                     >
-                                        {avatar}
-                                     </button>
+                                       <button 
+                                            key={avatar} 
+                                            onClick={() => setNewProfileAvatar(avatar)} 
+                                            className={`text-3xl w-12 h-12 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${newProfileAvatar === avatar ? 'bg-indigo-100 ring-2 ring-indigo-500 scale-110' : 'bg-slate-50'}`}
+                                           >
+                                            {avatar}
+                                           </button>
                                 ))}
                             </div>
                         </div>
