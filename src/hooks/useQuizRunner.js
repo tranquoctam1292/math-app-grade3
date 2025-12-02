@@ -48,21 +48,123 @@ export const useQuizRunner = (currentProfile, config) => {
         const themes = ["Siêu thị", "Nông trại", "Trường học", "Thám hiểm đại dương", "Vũ trụ", "Thế giới kẹo ngọt"];
         const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
+        // Map difficultyMode sang level range và mô tả
+        const difficultyInfo = {
+            easy: { levelRange: '1-2', description: 'Khởi động - Dành cho bé cần củng cố gốc', levels: [1, 2] },
+            medium: { levelRange: '2-3', description: 'Tiêu chuẩn - Bám sát SGK trên lớp', levels: [2, 3] },
+            hard: { levelRange: '3-4', description: 'Thần đồng - Thử thách tư duy & HS Giỏi', levels: [3, 4] }
+        };
+        const currentDifficulty = difficultyInfo[config.difficultyMode] || difficultyInfo.medium;
+
+        // ✅ Tiêu chuẩn độ khó chi tiết cho từng level (dựa trên SGK Toán lớp 3 HK1)
+        const getLevelStandards = (level) => {
+            switch (level) {
+                case 1:
+                    return `Level 1 - Khởi Động:
+- Phạm vi số: 1-100 (số có 1-2 chữ số, số tròn chục: 10, 20, 30, ..., 90)
+- Phép tính: Cộng/trừ đơn giản trong phạm vi 100 (không nhớ hoặc nhớ 1 lần). Ví dụ: 25 + 13, 48 - 25
+- Bảng nhân/chia: CHỈ dùng bảng nhân 2, 5 và bảng chia 2, 5. Ví dụ: 2 × 6, 5 × 4, 18 : 2, 15 : 5
+- Độ phức tạp: Tính toán trực tiếp 1 bước, không cần suy luận phức tạp
+- Ví dụ: "Bé tính: 35 + 24 = ?", "Bảng nhân 2: 2 × 6 = ?", "Chia hết: 18 : 2 = ?"`;
+                case 2:
+                    return `Level 2 - Tiêu Chuẩn:
+- Phạm vi số: 100-1000 (số có 2-3 chữ số, số tròn trăm: 100, 200, 300, ..., 900)
+- Phép tính: Cộng/trừ có nhớ trong phạm vi 1000. Ví dụ: 256 + 187, 432 - 189
+- Bảng nhân/chia: CHỈ dùng bảng nhân 3, 4, 6 và bảng chia 3, 4, 6. Ví dụ: 3 × 7, 4 × 8, 21 : 3, 32 : 4
+- Nhân số tròn chục với số có một chữ số: 20 × 3, 50 × 4
+- Chia số tròn chục/trăm cho số có một chữ số: 60 : 3, 200 : 4
+- Độ phức tạp: Tính toán 1-2 bước, có thể cần suy luận đơn giản
+- Ví dụ: "Tính: 347 + 258 = ?", "Bảng nhân 4: 4 × 7 = ?", "Gấp 5 lên 3 lần được bao nhiêu?"`;
+                case 3:
+                    return `Level 3 - Nâng Cao:
+- Phạm vi số: 500-1000 (số có 3 chữ số, gần giới hạn, có thể đến 999)
+- Phép tính: Nhân với số có một chữ số (không nhớ): 234 × 2, 456 × 3
+- Chia cho số có một chữ số: 648 : 3, 875 : 5
+- Phép chia có dư: 17 : 3 = 5 dư 2, 47 : 6 = 7 dư 5
+- Bảng nhân/chia: CHỈ dùng bảng nhân 7, 8, 9 và bảng chia 7, 8, 9. Ví dụ: 7 × 8, 8 × 9, 56 : 7, 72 : 8
+- So sánh số lớn gấp mấy lần số bé: "Số 24 gấp mấy lần số 6?"
+- Biểu thức số đơn giản: (5 + 3) × 2, (12 + 8) × 3
+- Độ phức tạp: Tính toán 2-3 bước, cần suy luận và phân tích
+- Ví dụ: "Tính: 456 × 3 = ?", "Chia có dư: 47 : 6 = ?", "Tính giá trị biểu thức: (12 + 8) × 3 = ?"`;
+                case 4:
+                    return `Level 4 - Thần Đồng:
+- Phạm vi số: 800-1000 (số lớn nhất trong phạm vi HK1)
+- Phép tính: Nhân với số có một chữ số (có nhớ): 789 × 4, 956 × 7
+- Chia cho số có một chữ số (phức tạp): 987 : 3, 856 : 4
+- Tính giá trị biểu thức số phức tạp: (45 + 15) : 3, (100 - 40) × 2, ((10 + 5) × 2) : 3
+- Giải bài toán có đến hai bước tính: "Có 3 thùng, mỗi thùng có 24 quả cam. Người ta bán đi 15 quả. Hỏi còn lại bao nhiêu quả?"
+- Bảng nhân/chia 7, 8, 9: Vận dụng linh hoạt
+- Độ phức tạp: Tính toán 3+ bước, cần tư duy logic và phân tích, bài toán đố phức tạp
+- Ví dụ: "Tính: 789 × 6 = ?", "Tính giá trị biểu thức: (100 - 28) : 4 = ?", "Một cửa hàng có 5 thùng, mỗi thùng có 48 quyển vở. Người ta bán đi 3 thùng. Hỏi còn lại bao nhiêu quyển vở?"`;
+                default:
+                    return '';
+            }
+        };
+
+        // Tạo chuỗi tiêu chuẩn cho các level được phép
+        const levelStandardsText = currentDifficulty.levels.map(level => getLevelStandards(level)).join('\n\n');
+
         const aiPrompt = `
         Mã phiên: ${randomSeed}. Vai trò: GV Toán lớp 3. Tạo 10 câu hỏi JSON.
         BỐI CẢNH: ${config.semester === 'hk1' ? 'HK1' : 'HK2'}. Chủ đề: ${randomTheme}.
+        
+        ĐỘ KHÓ: ${currentDifficulty.description} (Level ${currentDifficulty.levelRange}). 
+        Mỗi câu hỏi PHẢI có trường 'level' là một trong các giá trị: ${currentDifficulty.levels.join(', ')}.
+        
+        ✅ TIÊU CHUẨN ĐỘ KHÓ CHI TIẾT (TUYỆT ĐỐI PHẢI TUÂN THỦ):
+        ${levelStandardsText}
+        
+        QUY TẮC QUAN TRỌNG:
+        - Nếu level = 1: CHỈ dùng số 1-100, CHỈ dùng bảng nhân/chia 2, 5
+        - Nếu level = 2: Dùng số 100-1000, CHỈ dùng bảng nhân/chia 3, 4, 6, có thể nhân/chia số tròn chục/trăm
+        - Nếu level = 3: Dùng số 500-1000, CHỈ dùng bảng nhân/chia 7, 8, 9, có thể chia có dư, biểu thức số đơn giản
+        - Nếu level = 4: Dùng số 800-1000, nhân/chia có nhớ, biểu thức số phức tạp, bài toán đố 2+ bước
+        
         CHỈ TẠO CÂU HỎI VỀ CHỦ ĐỀ: ${topicLabels}. TUYỆT ĐỐI KHÔNG tạo câu hỏi ngoài các chủ đề này.
         YÊU CẦU: ${dynamicConstraint}. Câu văn ngắn gọn. TUYỆT ĐỐI KHÔNG dùng đơn vị "tá", "lạng". Sử dụng đơn vị chuẩn: kg, g, lít, ml, km, m, cm, mm.
-        QUY TẮC: 'correctVal' là số/từ đơn giản. 'options' đủ 4 giá trị.
+        QUY TẮC: 'correctVal' là số/từ đơn giản. 'options' đủ 4 giá trị. 'level' PHẢI là ${currentDifficulty.levels.join(' hoặc ')}.
         TYPES: mcq(40%), fill_blank(20%), comparison(10%), sorting(15%), matching(15%).
-        Lưu ý: Nếu chủ đề là Hình học, hãy ưu tiên Type 'mcq' và 'comparison', giảm bớt 'sorting' nếu không phù hợp.
+        Lưu ý: 
+        - Nếu chủ đề là Hình học, hãy ưu tiên Type 'mcq' và 'comparison', giảm bớt 'sorting' nếu không phù hợp.
+        - ✅ QUAN TRỌNG: Với phép chia có dư, PHẢI dùng type 'mcq' (KHÔNG dùng 'fill_blank'). Format: text = "Chia có dư: 47 : 6 = ?", correctVal = "7 dư 5", options = ["7 dư 5", "7 dư 4", "8 dư 1", "6 dư 5"].
         OUTPUT JSON SCHEMA.
         `;
 
         const processQuestions = (questions) => {
+            // Import chooseLevel từ offlineGenerator để đảm bảo level phù hợp với difficultyMode
+            const chooseLevel = (difficulty) => {
+                const DIFFICULTY_MIX = {
+                    easy: { 2: 7, 3: 3, 4: 0 },
+                    medium: { 2: 4, 3: 4, 4: 2 },
+                    hard: { 2: 2, 3: 4, 4: 4 }
+                };
+                const mix = DIFFICULTY_MIX[difficulty] || DIFFICULTY_MIX.medium;
+                const pool = Object.entries(mix).flatMap(([level, count]) => Array(count).fill(Number(level)));
+                return pool[Math.floor(Math.random() * pool.length)];
+            };
+
+            const currentDifficulty = difficultyInfo[config.difficultyMode] || difficultyInfo.medium;
+            
             return questions.map((q, idx) => {
+                // Validate và điều chỉnh level dựa trên difficultyMode
+                let questionLevel = q.level;
+                
+                // Kiểm tra xem level từ AI có hợp lệ không
+                const isValidLevel = questionLevel && typeof questionLevel === 'number' && questionLevel >= 1 && questionLevel <= 4;
+                const isLevelInDifficultyRange = isValidLevel && currentDifficulty.levels.includes(questionLevel);
+                
+                if (!isValidLevel || !isLevelInDifficultyRange) {
+                    // Nếu AI không trả về level hoặc level không phù hợp với difficultyMode, chọn level dựa trên difficultyMode
+                    questionLevel = chooseLevel(config.difficultyMode);
+                    if (import.meta.env.DEV && !isValidLevel) {
+                        console.warn(`Question ${idx + 1}: Invalid level from AI (${q.level}), using ${questionLevel} based on difficultyMode: ${config.difficultyMode}`);
+                    } else if (import.meta.env.DEV && !isLevelInDifficultyRange) {
+                        console.warn(`Question ${idx + 1}: Level ${q.level} not in difficulty range ${currentDifficulty.levels.join(', ')}, using ${questionLevel}`);
+                    }
+                }
+
                 let processedQ = {
-                    ...q, id: idx, level: q.level || 2,
+                    ...q, id: idx, level: questionLevel,
                     topic: TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic',
                     type: q.type || 'mcq'
                 };
