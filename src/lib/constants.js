@@ -1,5 +1,5 @@
 import { 
-  Calculator, Sigma, Target, Brain, BookOpen, Banknote, Shapes, Hash, BarChart3, HelpCircle 
+    Calculator, Sigma, Target, Brain, BookOpen, Banknote, Shapes, Hash, BarChart3, HelpCircle 
 } from 'lucide-react';
 
 export const TOPICS_LIST = [
@@ -45,15 +45,15 @@ export const REWARD_PER_LEVEL = { 2: 200, 3: 300, 4: 350 };
 export const DIFFICULTY_MIX = {
     easy: { 2: 7, 3: 3, 4: 0 },    
     medium: { 2: 4, 3: 4, 4: 2 }, 
-    hard: { 2: 2, 3: 4, 4: 4 }    
+    hard: { 2: 2, 3: 4, 4: 4 }     
 };
 
 export const SHOP_ITEMS = [
-  { id: 'cash_10k', name: '10.000đ Tiền mặt', value: 10000, color: 'bg-green-100 text-green-700 border-green-200' },
-  { id: 'cash_20k', name: '20.000đ Tiền mặt', value: 20000, color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { id: 'cash_30k', name: '30.000đ Tiền mặt', value: 30000, color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { id: 'cash_40k', name: '40.000đ Tiền mặt', value: 40000, color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { id: 'cash_50k', name: '50.000đ Tiền mặt', value: 50000, color: 'bg-red-100 text-red-700 border-red-200' },
+    { id: 'cash_10k', name: '10.000đ Tiền mặt', value: 10000, color: 'bg-green-100 text-green-700 border-green-200' },
+    { id: 'cash_20k', name: '20.000đ Tiền mặt', value: 20000, color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    { id: 'cash_30k', name: '30.000đ Tiền mặt', value: 30000, color: 'bg-purple-100 text-purple-700 border-purple-200' },
+    { id: 'cash_40k', name: '40.000đ Tiền mặt', value: 40000, color: 'bg-orange-100 text-orange-700 border-orange-200' },
+    { id: 'cash_50k', name: '50.000đ Tiền mặt', value: 50000, color: 'bg-red-100 text-red-700 border-red-200' },
 ];
 
 export const AVATARS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮'];
@@ -175,7 +175,8 @@ export const BACKUP_QUESTIONS = [
         "correctVal": "20",
         "explanation": "Chu vi hình vuông = cạnh × 4 = 5 × 4 = 20 (cm).",
         "level": 2,
-        "topic": "geometry"
+        "topic": "geometry",
+        "svgContent": "<rect x='100' y='50' width='100' height='100' stroke='#4F46E5' stroke-width='3' fill='#E0E7FF' /><text x='150' y='170' font-size='14' text-anchor='middle' fill='#374151' font-weight='bold'>5 cm</text>"
     },
     {
         "type": "mcq",
@@ -184,7 +185,8 @@ export const BACKUP_QUESTIONS = [
         "correctVal": "40",
         "explanation": "Diện tích hình chữ nhật = Dài × Rộng = 10 × 4 = 40 (cm²).",
         "level": 3,
-        "topic": "geometry"
+        "topic": "geometry",
+        "svgContent": "<rect x='50' y='60' width='200' height='80' stroke='#4F46E5' stroke-width='3' fill='#E0E7FF' /><text x='150' y='160' font-size='14' text-anchor='middle' fill='#374151' font-weight='bold'>10 cm</text><text x='270' y='110' font-size='14' text-anchor='middle' fill='#374151' font-weight='bold'>4 cm</text>"
     },
     {
         "type": "mcq",
@@ -193,7 +195,8 @@ export const BACKUP_QUESTIONS = [
         "correctVal": "90",
         "explanation": "Góc vuông có số đo bằng 90 độ (ký hiệu 90°).",
         "level": 2,
-        "topic": "geometry"
+        "topic": "geometry",
+        "svgContent": "<path d='M 50 50 L 50 150 L 150 150' stroke='#4F46E5' stroke-width='4' fill='none' /><rect x='50' y='130' width='20' height='20' stroke='#EF4444' stroke-width='2' fill='none' />"
     },
 
     // --- FRACTIONS (Phân số) ---

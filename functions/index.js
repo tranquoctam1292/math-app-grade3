@@ -85,6 +85,21 @@ exports.generateQuestions = onCall({
           "level": 2, 
           "topic": "arithmetic"
         }
+        
+        4. Yêu cầu đặc biệt cho HÌNH HỌC ("geometry"):
+        Nếu câu hỏi yêu cầu tính chu vi, diện tích, hoặc nhận biết hình, hãy thêm trường **"svgContent"**.
+        **"svgContent"**: "Chuỗi chứa các thẻ SVG con (như <rect>, <path>, <circle>, <text>...) để vẽ hình minh họa. KHÔNG bao gồm thẻ <svg> bao ngoài. ViewBox mặc định là 0 0 300 200. Hãy vẽ nét đậm (stroke-width='3'), màu đen hoặc xanh dương, fill='none' hoặc màu nhạt."
+
+        Ví dụ câu hỏi hình học:
+        {
+          "type": "mcq",
+          "text": "Tính chu vi hình chữ nhật có chiều dài 10cm, chiều rộng 5cm.",
+          "options": ["30cm", "15cm", "50cm", "25cm"],
+          "correctVal": "30cm",
+          "level": 2,
+          "topic": "geometry",
+          "svgContent": "<rect x='50' y='50' width='200' height='100' stroke='#4F46E5' stroke-width='3' fill='#E0E7FF' /><text x='150' y='170' text-anchor='middle' fill='black'>10cm</text><text x='260' y='100' text-anchor='middle' fill='black'>5cm</text>"
+        }
         `;
 
         const fullPrompt = jsonInstruction + "\n\n" + "NỘI DUNG YÊU CẦU CỤ THỂ:\n" + prompt;
