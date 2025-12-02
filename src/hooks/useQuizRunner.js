@@ -71,22 +71,45 @@ export const useQuizRunner = (currentProfile, config) => {
                 let computedVal = null;
 
                 if (processedQ.type === 'comparison') {
+                    const originalCorrectVal = processedQ.correctVal; // Lưu giá trị từ AI
                     computedVal = solveComparison(processedQ.text);
+                    // ✅ FIX: Với comparison, computedVal là string ('>', '<', '='), luôn cập nhật nếu tính được
+                    if (computedVal !== null && (computedVal === '>' || computedVal === '<' || computedVal === '=')) {
+                        // Validate: Đảm bảo correctVal từ AI khớp với tính toán
+                        if (originalCorrectVal && originalCorrectVal !== computedVal) {
+                            console.warn(`Comparison answer mismatch: AI said "${originalCorrectVal}", computed "${computedVal}". Using computed value.`);
+                        }
+                        processedQ.correctVal = computedVal; // Luôn dùng giá trị tính được
+                    } else if (computedVal === null) {
+                        // Nếu không tính được, validate correctVal từ AI bằng cách tính lại
+                        console.warn(`Could not compute comparison for: ${processedQ.text}. Using AI value: ${originalCorrectVal}`);
+                        // Giữ nguyên giá trị từ AI nếu không tính được
+                    }
                 } else if (processedQ.topic === 'finding_x' || processedQ.text.toLowerCase().includes('tìm x')) {
                     computedVal = solveEquation(processedQ.text);
+                    if (computedVal !== null && !isNaN(computedVal)) {
+                        processedQ.correctVal = String(computedVal);
+                    } else {
+                        console.warn(`Could not solve equation for: ${processedQ.text}. Using AI value: ${processedQ.correctVal}`);
+                    }
                 } else if ((processedQ.type === 'mcq' || processedQ.type === 'fill_blank') && (processedQ.topic === 'arithmetic' || processedQ.topic === 'expressions')) {
                     computedVal = solveSimpleExpression(processedQ.text);
-                }
-
-                if (computedVal !== null && !isNaN(computedVal)) {
-                    const correctStr = String(computedVal);
-                    processedQ.correctVal = correctStr;
-
-                    if (processedQ.type === 'mcq' && Array.isArray(processedQ.options)) {
-                        const hasCorrectOption = processedQ.options.some(opt => normalizeVal(opt) === normalizeVal(correctStr));
-                        if (!hasCorrectOption) {
-                            processedQ.options[Math.floor(Math.random() * 4)] = correctStr;
+                    if (computedVal !== null && !isNaN(computedVal)) {
+                        const correctStr = String(computedVal);
+                        // Validate: Nếu AI đưa đáp án khác với tính toán, dùng tính toán
+                        if (processedQ.correctVal && normalizeVal(processedQ.correctVal) !== normalizeVal(correctStr)) {
+                            console.warn(`MCQ/FillBlank answer mismatch: AI said "${processedQ.correctVal}", computed "${correctStr}". Using computed value.`);
                         }
+                        processedQ.correctVal = correctStr;
+
+                        if (processedQ.type === 'mcq' && Array.isArray(processedQ.options)) {
+                            const hasCorrectOption = processedQ.options.some(opt => normalizeVal(opt) === normalizeVal(correctStr));
+                            if (!hasCorrectOption) {
+                                processedQ.options[Math.floor(Math.random() * 4)] = correctStr;
+                            }
+                        }
+                    } else {
+                        console.warn(`Could not compute expression for: ${processedQ.text}. Using AI value: ${processedQ.correctVal}`);
                     }
                 }
 

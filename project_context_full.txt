@@ -620,8 +620,13 @@ const MathApp = () => {
         }
     }, [appUser, isAuthReady, gameState]);
 
-    // --- CẬP NHẬT: Logic tự động chọn lại Profile cũ ---
+    // --- CẬP NHẬT: Logic tự động chọn lại Profile cũ (chỉ chạy duy nhất 1 lần sau khi load) ---
+    const [hasRestoredProfile, setHasRestoredProfile] = useState(false);
+
     useEffect(() => {
+        // Nếu đã auto-restore 1 lần thì không chạy nữa (tránh nhấp nháy khi người dùng tự mở màn hình hồ sơ)
+        if (hasRestoredProfile) return;
+
         // Chỉ chạy khi đã tải xong dữ liệu và chưa chọn profile nào
         if (!isLoadingData && profiles.length > 0 && !currentProfile && gameState === 'profile_select') {
             const lastProfileId = localStorage.getItem('math_app_last_profile_id');
@@ -630,16 +635,20 @@ const MathApp = () => {
                 if (foundProfile) {
                     console.log("Auto restoring profile:", foundProfile.name);
                     
-                    // ✅ FIX: Dùng setTimeout để đẩy việc update state ra khỏi luồng render hiện tại
-                    // Điều này giúp tránh lỗi "set-state-in-effect" của ESLint
+                    // ✅ Dùng setTimeout để đẩy việc update state ra khỏi luồng render hiện tại
                     setTimeout(() => {
                         setCurrentProfile(foundProfile);
                         setGameState('home');
+                        setHasRestoredProfile(true);
                     }, 0);
+                    return;
                 }
             }
+
+            // Không tìm thấy profile để restore → đánh dấu đã xử lý để không lặp lại
+            setTimeout(() => setHasRestoredProfile(true), 0);
         }
-    }, [isLoadingData, profiles, currentProfile, gameState]);
+    }, [isLoadingData, profiles, currentProfile, gameState, hasRestoredProfile]);
 
     // --- EFFECT: Background Preloading ---
     const { generateQuizQuestions, setPreloadedQuiz } = gameRunner;
@@ -719,7 +728,10 @@ const MathApp = () => {
                 }
             } catch (err) {
                 console.error("Lỗi cập nhật piggyBank qua Cloud Function:", err);
+                // Fallback: cập nhật local state nếu Cloud Function không khả dụng
+                // Lưu ý: Điểm này sẽ không được lưu vào Firestore, nhưng app vẫn hoạt động
                 setPiggyBank(prev => prev + newScore);
+                // Không hiển thị lỗi cho user vì đây là lỗi backend, không ảnh hưởng trải nghiệm
             }
 
             // Cập nhật stats & logs (không đụng vào piggyBank nữa)
@@ -815,9 +827,22 @@ const MathApp = () => {
             case 'home': 
                 return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={gameRunner.isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} onOpenConfig={() => requestParentGate('config', () => setGameState('config'))} />;
             case 'playing': 
-                return <React.Suspense fallback={<Loader/>}><QV quizData={gameRunner.quizData} currentQIndex={gameRunner.currentQIndex} setGameState={setGameState} sessionScore={gameRunner.sessionScore} selectedOption={gameRunner.selectedOption} isSubmitted={gameRunner.isSubmitted} handleSelectOption={gameRunner.handleSelectOption} handleNextQuestion={handleNextQuestionWrapper} /></React.Suspense>;
+                return <React.Suspense fallback={<Loader/>}><QV quizData={gameRunner.quizData} currentQIndex={gameRunner.currentQIndex} setGameState={setGameState} sessionScore={gameRunner.sessionScore} selectedOption={gameRunner.selectedOption} isSubmitted={gameRunner.isSubmitted} handleSelectOption={gameRunner.handleSelectOption} handleNextQuestion={handleNextQuestionWrapper} attemptCount={gameRunner.attemptCount} resetCurrentQuestion={gameRunner.resetCurrentQuestion} /></React.Suspense>;
             case 'result': 
-                return <ResultScreen history={gameRunner.history} sessionScore={gameRunner.sessionScore} setGameState={setGameState} currentProfile={currentProfile} />;
+                return (
+                    <ResultScreen 
+                        history={gameRunner.history} 
+                        sessionScore={gameRunner.sessionScore} 
+                        setGameState={setGameState} 
+                        currentProfile={currentProfile} 
+                        onRetryWrongQuestions={(wrongQuestions) => {
+                            if (!wrongQuestions || wrongQuestions.length === 0) return;
+                            // Khởi động một mini-session chỉ với các câu sai
+                            gameRunner.startSession(wrongQuestions);
+                            setGameState('playing');
+                        }}
+                    />
+                );
             case 'config': 
                 return <ConfigScreen config={config} saveConfig={saveConfigWrapper} setGameState={setGameState} />;
             case 'user_profile': 
@@ -883,7 +908,8 @@ import {
     createUserWithEmailAndPassword, 
     updateProfile, 
     signInAnonymously,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    signOut
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
@@ -928,14 +954,46 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 isAnon: false
             };
             
-            await onLoginSuccess(appUser);
+            try {
+                await onLoginSuccess(appUser);
+            } catch (postLoginError) {
+                // Lỗi xảy ra sau khi đăng nhập thành công (thường là lỗi Firestore permissions)
+                console.error("Lỗi sau khi đăng nhập:", postLoginError);
+                let msg = "Đăng nhập thành công nhưng không thể tải dữ liệu. ";
+                if (postLoginError.code === 'permission-denied' || postLoginError.message?.includes('permission')) {
+                    msg += "Vui lòng kiểm tra quyền truy cập Firestore.";
+                } else {
+                    msg += postLoginError.message || "Vui lòng thử lại.";
+                }
+                setErrorMsg(msg);
+                // Sign out để tránh trạng thái không nhất quán
+                if (auth) {
+                    await signOut(auth);
+                }
+                return;
+            }
 
         } catch (e) {
             console.error(e);
-            let msg = "Lỗi kết nối: " + e.message;
-            if (e.code === 'auth/email-already-in-use') msg = "Email này đã được đăng ký!";
-            if (e.code === 'auth/invalid-email') msg = "Email không hợp lệ!";
-            if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') msg = "Sai email hoặc mật khẩu!";
+            let msg = "";
+            // Xử lý các lỗi Firebase Auth cụ thể
+            if (e.code === 'auth/email-already-in-use') {
+                msg = "Email này đã được đăng ký!";
+            } else if (e.code === 'auth/invalid-email') {
+                msg = "Email không hợp lệ!";
+            } else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+                msg = "Sai email hoặc mật khẩu!";
+            } else if (e.code === 'auth/weak-password') {
+                msg = "Mật khẩu quá yếu. Vui lòng chọn mật khẩu mạnh hơn!";
+            } else if (e.code === 'auth/network-request-failed') {
+                msg = "Lỗi kết nối mạng. Vui lòng kiểm tra internet!";
+            } else if (e.code) {
+                // Các lỗi Firebase Auth khác
+                msg = `Lỗi đăng nhập: ${e.code}`;
+            } else {
+                // Lỗi không xác định
+                msg = "Lỗi kết nối: " + (e.message || "Vui lòng thử lại.");
+            }
             setErrorMsg(msg);
         } finally {
             setLoading(false);
@@ -955,9 +1013,25 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 createdAt: Date.now(),
                 isAnon: true
             };
-            await onLoginSuccess(anonUser);
+            try {
+                await onLoginSuccess(anonUser);
+            } catch (postLoginError) {
+                console.error("Lỗi sau khi đăng nhập ẩn danh:", postLoginError);
+                setErrorMsg("Đăng nhập ẩn danh thành công nhưng không thể khởi tạo. Vui lòng thử lại.");
+                if (auth) {
+                    await signOut(auth);
+                }
+                return;
+            }
         } catch(e) {
-            setErrorMsg("Lỗi đăng nhập ẩn danh: " + e.message);
+            console.error("Lỗi đăng nhập ẩn danh:", e);
+            let msg = "Lỗi đăng nhập ẩn danh: ";
+            if (e.code === 'auth/network-request-failed') {
+                msg += "Lỗi kết nối mạng. Vui lòng kiểm tra internet!";
+            } else {
+                msg += e.message || "Vui lòng thử lại.";
+            }
+            setErrorMsg(msg);
         } finally {
             setLoading(false);
         }
@@ -1762,12 +1836,15 @@ const buildGeometrySvg = (question) => {
         <text x="${(300 + width) / 2 + 10}" y="110" font-size="14" fill="#374151" font-weight="bold" transform="rotate(-90 ${(300 + width) / 2 + 10},110)">${nums[1] || nums[0] || 5} cm</text>`;
 };
 
-const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion }) => {
+const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion, attemptCount, resetCurrentQuestion }) => {
     const q = quizData[currentQIndex];
     const geometrySvg = buildGeometrySvg(q);
     const progress = ((currentQIndex + 1) / quizData.length) * 100;
     
     if (!q) return <div className="p-6 text-center">Đang tải...</div>;
+
+    // Kiểm tra xem có phải True/False (comparison) không
+    const isTrueFalseType = q.type === 'comparison';
 
     // ✅ SỬA ĐỔI: Logic kiểm tra đúng sai nhất quán với MathApp.js
     let isCorrect = false;
@@ -1849,9 +1926,98 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                 {/* Question Box (Chỉ hiện text ở đây nếu ko phải FillBlank - vì FillBlank đã tích hợp text bên trong) */}
                 {q.type !== 'fill_blank' && (
                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6 shrink-0">
-                        <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
-                            <MathText text={q.text} />
-                        </div>
+                        {/* Với comparison, cần parse và hiển thị biểu thức rõ ràng hơn */}
+                        {q.type === 'comparison' ? (
+                            <div className="text-center">
+                                <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed mb-4">
+                                    {q.text.includes('So sánh') || q.text.includes('so sánh') 
+                                        ? 'So sánh hai biểu thức sau:'
+                                        : q.text.includes('Điền dấu') || q.text.includes('điền dấu')
+                                        ? 'Điền dấu thích hợp:'
+                                        : 'So sánh:'
+                                    }
+                                </div>
+                                {/* Parse và hiển thị biểu thức từ text hoặc explanation */}
+                                {(() => {
+                                    let expressionPart = '';
+                                    
+                                    // 1. Thử tìm biểu thức trong text (sau dấu hai chấm)
+                                    const textParts = q.text.split(/[:：]/);
+                                    if (textParts.length > 1) {
+                                        const afterColon = textParts.slice(1).join(':').trim();
+                                        if (afterColon && afterColon.length > 2) {
+                                            expressionPart = afterColon;
+                                        }
+                                    }
+                                    
+                                    // 2. Nếu không tìm thấy, thử tìm pattern với dấu ... hoặc ___
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        const match = q.text.match(/([^:]+(?:\.\.\.|___|…|với)[^:]+)/);
+                                        if (match && match[1].trim().length > 2) {
+                                            expressionPart = match[1].trim();
+                                        }
+                                    }
+                                    
+                                    // 3. Nếu vẫn không tìm thấy, thử parse từ explanation
+                                    if ((!expressionPart || expressionPart.length < 3) && q.explanation) {
+                                        // Pattern 1: "125 + 75 = 200; 250 - 40 = 210. Vì 200 < 210 nên 125 + 75 < 250 - 40"
+                                        const expMatch1 = q.explanation.match(/(\d+\s*[+\-×x*÷/]\s*\d+)\s*=\s*\d+\s*[;,]?\s*(\d+\s*[+\-×x*÷/]\s*\d+)\s*=\s*\d+/);
+                                        if (expMatch1) {
+                                            expressionPart = `${expMatch1[1].trim()} ... ${expMatch1[2].trim()}`;
+                                        } else {
+                                            // Pattern 2: "125 + 75 < 250 - 40" (trực tiếp trong explanation)
+                                            const expMatch2 = q.explanation.match(/(\d+\s*[+\-×x*÷/]\s*\d+)\s*(<|>|=)\s*(\d+\s*[+\-×x*÷/]\s*\d+)/);
+                                            if (expMatch2) {
+                                                expressionPart = `${expMatch2[1].trim()} ... ${expMatch2[3].trim()}`;
+                                            } else {
+                                                // Pattern 3: Tìm bất kỳ biểu thức nào có dấu toán học
+                                                const expMatch3 = q.explanation.match(/([0-9]+\s*[+\-×x*÷/]\s*[0-9]+)\s*[^0-9+\-×x*÷/]*\s*([0-9]+\s*[+\-×x*÷/]\s*[0-9]+)/);
+                                                if (expMatch3) {
+                                                    expressionPart = `${expMatch3[1].trim()} ... ${expMatch3[2].trim()}`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // 4. Nếu vẫn không tìm thấy, loại bỏ phần câu dẫn và dùng phần còn lại của text
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        const cleaned = q.text
+                                            .replace(/^(So sánh|Điền dấu|so sánh|điền dấu).*?[:：]\s*/i, '')
+                                            .replace(/^(hai biểu thức sau|thích hợp)\s*/i, '')
+                                            .trim();
+                                        if (cleaned && cleaned.length > 2 && cleaned !== q.text) {
+                                            expressionPart = cleaned;
+                                        }
+                                    }
+                                    
+                                    // 5. Nếu vẫn rỗng, hiển thị text gốc (có thể text đã chứa biểu thức)
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        expressionPart = q.text;
+                                    }
+                                    
+                                    // Debug: Log để kiểm tra (chỉ trong dev mode)
+                                    if (import.meta.env.DEV) {
+                                        console.log('Comparison question:', {
+                                            text: q.text,
+                                            explanation: q.explanation,
+                                            parsed: expressionPart
+                                        });
+                                    }
+                                    
+                                    return (
+                                        <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200">
+                                            <div className="text-2xl sm:text-3xl font-black text-indigo-700 leading-relaxed">
+                                                <MathText text={expressionPart} />
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
+                                <MathText text={q.text} />
+                            </div>
+                        )}
                         {/* SVG Support */}
                         {geometrySvg && (
                             <div className="mt-4 flex justify-center animation-fade-in">
@@ -1878,8 +2044,48 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                 </div>
             </div>
 
-            {/* --- RESULT MODAL (POPUP) --- */}
-            {isSubmitted && (
+            {/* --- HINT MESSAGE (Khi sai lần đầu và không phải True/False) --- */}
+            {isSubmitted && !isCorrect && attemptCount === 1 && !isTrueFalseType && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animation-fade-in">
+                    <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-shake border-4 border-orange-200">
+                        <div className="p-6 text-center bg-orange-100">
+                            <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-3 shadow-sm border-4 border-white bg-orange-500 text-white">
+                                <Frown size={48} />
+                            </div>
+                            <h2 className="text-2xl font-black uppercase text-orange-700">
+                                Chưa đúng rồi!
+                            </h2>
+                            <p className="font-bold text-slate-600 text-sm mt-1">
+                                Thử tính lại xem!
+                            </p>
+                        </div>
+                        <div className="p-6 bg-white">
+                            <ClayButton 
+                                onClick={() => {
+                                    // Reset để cho phép thử lại
+                                    if (resetCurrentQuestion) {
+                                        resetCurrentQuestion();
+                                    }
+                                }}
+                                colorClass="bg-orange-500 text-white" 
+                                className="w-full h-14 font-black text-xl flex items-center justify-center gap-2 !rounded-xl shadow-lg"
+                            >
+                                Thử Lại
+                            </ClayButton>
+                            <ClayButton 
+                                onClick={handleNextQuestion} 
+                                colorClass="bg-slate-200 text-slate-700" 
+                                className="w-full h-12 font-bold text-sm flex items-center justify-center gap-2 !rounded-xl mt-3"
+                            >
+                                Bỏ Qua
+                            </ClayButton>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- RESULT MODAL (POPUP) - Chỉ hiện khi attemptCount >= 2 hoặc là True/False --- */}
+            {isSubmitted && (attemptCount >= 2 || isTrueFalseType || isCorrect) && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animation-fade-in">
                     <div className={`w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-shake border-4 ${isCorrect ? 'border-green-200' : 'border-red-200'}`}>
                         {/* Modal Header */}
@@ -1891,7 +2097,10 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                                 {isCorrect ? "Hoan hô!" : "Tiếc quá!"}
                             </h2>
                             <p className="font-bold text-slate-600 text-sm mt-1">
-                                {isCorrect ? "Bé giỏi quá đi thôi!" : "Không sao, thử lại lần sau nhé."}
+                                {isCorrect 
+                                    ? (attemptCount === 2 ? "Đúng rồi! (Đã trừ 50% điểm thưởng)" : "Bé giỏi quá đi thôi!")
+                                    : "Không sao, thử lại lần sau nhé."
+                                }
                             </p>
                         </div>
 
@@ -2718,42 +2927,72 @@ FILE PATH: src\components\ResultScreen.jsx
 ==================================================
 import React from 'react';
 
-const ResultScreen = ({ history, sessionScore, setGameState, currentProfile }) => {
+const ResultScreen = ({ history, sessionScore, setGameState, currentProfile, onRetryWrongQuestions }) => {
     const correctAnswers = history.filter(q => q.isCorrect).length;
     const totalQuestions = history.length;
+    const wrongQuestions = history.filter(q => !q.isCorrect);
 
     return (
-        <div className="p-6">
-            <h1 className="text-3xl font-bold text-center mb-2">Hoàn thành!</h1>
-            <p className="text-center text-gray-600 mb-6">Chúc mừng {currentProfile?.name} đã hoàn thành bài tập.</p>
+        <div className="p-6 flex flex-col h-full bg-slate-50">
+            <h1 className="text-3xl font-black text-center mb-1 text-slate-800">Hoàn thành!</h1>
+            <p className="text-center text-slate-500 mb-6 font-semibold">Chúc mừng {currentProfile?.name} đã hoàn thành bài tập.</p>
 
-            <div className="bg-indigo-100 p-6 rounded-lg text-center mb-6">
-                <p className="text-lg">Tổng điểm đạt được</p>
-                <p className="text-5xl font-black text-indigo-600">{sessionScore}</p>
+            <div className="bg-indigo-100 p-6 rounded-3xl text-center mb-6 shadow-inner border border-indigo-200">
+                <p className="text-sm font-semibold text-indigo-700 uppercase tracking-wide">Tổng điểm phiên này</p>
+                <p className="text-5xl font-black text-indigo-600 mt-1">{sessionScore}</p>
             </div>
             
             <div className="grid grid-cols-2 gap-4 text-center mb-6">
-                <div className="bg-green-100 p-4 rounded-lg">
-                    <p className="text-2xl font-bold text-green-700">{correctAnswers}</p>
-                    <p className="text-sm font-semibold text-green-600">Câu đúng</p>
+                <div className="bg-green-100 p-4 rounded-2xl shadow-sm border border-green-200">
+                    <p className="text-2xl font-black text-green-700">{correctAnswers}</p>
+                    <p className="text-xs font-semibold text-green-600 uppercase tracking-wide">Câu đúng</p>
                 </div>
-                 <div className="bg-red-100 p-4 rounded-lg">
-                    <p className="text-2xl font-bold text-red-700">{totalQuestions - correctAnswers}</p>
-                    <p className="text-sm font-semibold text-red-600">Câu sai</p>
+                 <div className="bg-red-100 p-4 rounded-2xl shadow-sm border border-red-200">
+                    <p className="text-2xl font-black text-red-700">{totalQuestions - correctAnswers}</p>
+                    <p className="text-xs font-semibold text-red-600 uppercase tracking-wide">Câu sai</p>
                 </div>
             </div>
 
-            <h2 className="font-bold text-lg mb-2">Xem lại bài làm:</h2>
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <h2 className="font-bold text-lg mb-2 text-slate-800">Xem lại bài làm:</h2>
+            <div className="space-y-2 max-h-64 overflow-y-auto mb-4 no-scrollbar">
                 {history.map((q, index) => (
-                    <div key={q.id} className={`p-3 rounded-lg ${q.isCorrect ? 'bg-green-50' : 'bg-red-50'}`}>
-                       <p className="font-semibold text-sm">Câu {index + 1}: {q.text}</p>
-                       <p className="text-xs">Bạn chọn: {q.userAnswer}. Đáp án đúng: {q.correctOption}</p>
+                    <div 
+                        key={q.id ?? index} 
+                        className={`p-3 rounded-2xl border text-sm ${q.isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}
+                    >
+                        <p className="font-semibold text-slate-800 mb-1">
+                            Câu {index + 1}: {q.text}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                            Bạn chọn: <span className="font-semibold">{q.userAnswer}</span>
+                            {!q.isCorrect && (
+                                <>
+                                    {' '}| Đáp án đúng: <span className="font-semibold text-green-700">{q.correctOption || q.correctVal}</span>
+                                </>
+                            )}
+                        </p>
                     </div>
                 ))}
+
+                {history.length === 0 && (
+                    <p className="text-center text-xs text-slate-400">Chưa có dữ liệu bài làm.</p>
+                )}
             </div>
 
-            <button onClick={() => setGameState('home')} className="w-full bg-blue-500 text-white p-4 rounded-lg mt-6 font-bold">
+            {/* Nút Sửa lại các câu sai */}
+            {wrongQuestions.length > 0 && (
+                <button
+                    onClick={() => onRetryWrongQuestions && onRetryWrongQuestions(wrongQuestions)}
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-2xl font-black text-sm shadow-md mb-3 transition-colors"
+                >
+                    🔁 Sửa lại các câu sai ({wrongQuestions.length})
+                </button>
+            )}
+
+            <button 
+                onClick={() => setGameState('home')} 
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-2xl font-black text-sm shadow-md transition-colors"
+            >
                 Về trang chủ
             </button>
         </div>
@@ -3466,14 +3705,59 @@ export const useMathAuth = () => {
 
     const fetchAccountData = async (email) => {
         if (!email) return { devices: [], deviceSessions: [] };
-        const ref = getAccountRef(email);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
-            const ownerUid = auth.currentUser?.uid || null;
-            await setDoc(ref, { email, ownerUid, devices: [], deviceSessions: [] });
-            return { email, ownerUid, devices: [], deviceSessions: [] };
+        const currentUid = auth.currentUser?.uid;
+        if (!currentUid) {
+            throw new Error("Người dùng chưa được xác thực");
         }
-        return snap.data();
+        
+        const ref = getAccountRef(email);
+        try {
+            const snap = await getDoc(ref);
+            if (!snap.exists()) {
+                // Document chưa tồn tại, tạo mới
+                try {
+                    await setDoc(ref, { email, ownerUid: currentUid, devices: [], deviceSessions: [] });
+                    return { email, ownerUid: currentUid, devices: [], deviceSessions: [] };
+                } catch (createError) {
+                    console.error("Lỗi tạo document math_accounts:", createError);
+                    // Nếu lỗi permissions, ném lại để AuthScreen xử lý
+                    if (createError.code === 'permission-denied' || createError.message?.includes('permission')) {
+                        throw new Error("Không có quyền tạo tài khoản. Vui lòng kiểm tra Firestore rules.");
+                    }
+                    throw createError;
+                }
+            }
+            
+            // Document đã tồn tại, kiểm tra và cập nhật owner nếu cần
+            const data = snap.data();
+            
+            // Nếu document không có ownerUid hoặc ownerUid không khớp, cập nhật lại
+            // (Có thể do document được tạo từ trước khi có logic ownerUid)
+            if (!data.ownerUid || data.ownerUid !== currentUid) {
+                try {
+                    await updateDoc(ref, { ownerUid: currentUid });
+                    data.ownerUid = currentUid;
+                } catch (updateError) {
+                    console.warn("Không thể cập nhật ownerUid:", updateError);
+                    // Nếu không cập nhật được nhưng ownerUid rỗng, vẫn cho phép tiếp tục
+                    if (!data.ownerUid) {
+                        data.ownerUid = currentUid;
+                    } else {
+                        // Nếu ownerUid khác và không cập nhật được, ném lỗi
+                        throw new Error("Không có quyền truy cập tài khoản này. Chỉ chủ sở hữu mới có thể truy cập.");
+                    }
+                }
+            }
+            
+            return data;
+        } catch (error) {
+            console.error("Lỗi fetchAccountData:", error);
+            // Nếu lỗi permissions, ném lại để AuthScreen xử lý
+            if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('quyền')) {
+                throw new Error("Không có quyền truy cập dữ liệu tài khoản. Vui lòng kiểm tra Firestore rules.");
+            }
+            throw error;
+        }
     };
 
     const login = async (userAccount) => {
@@ -3483,32 +3767,43 @@ export const useMathAuth = () => {
         const isAnon = userAccount.isAnon || false;
 
         if (!isAnon) {
-            const accountData = await fetchAccountData(userAccount.email);
-            devices = accountData.devices || [];
-            sessions = accountData.deviceSessions || [];
-
-            if (!devices.includes(deviceId)) {
-                if (devices.length >= 3) {
-                    setAuthError("Tài khoản đã đăng nhập quá 3 thiết bị.");
-                    // Nếu vượt quá giới hạn, sign out ngay lập tức
-                    await signOut(auth);
-                    return false;
-                } else {
-                    devices.push(deviceId);
-                }
-            }
-
             try {
-                const accountRef = getAccountRef(userAccount.email);
-                const deviceName = getDeviceLabel();
-                const now = Date.now();
-                const updatedSessions = [
-                    ...sessions.filter(session => session.id !== deviceId),
-                    { id: deviceId, name: deviceName, lastActive: now }
-                ];
-                await updateDoc(accountRef, { devices, deviceSessions: updatedSessions });
-            } catch (e) {
-                console.warn("Lỗi cập nhật thiết bị:", e);
+                const accountData = await fetchAccountData(userAccount.email);
+                devices = accountData.devices || [];
+                sessions = accountData.deviceSessions || [];
+
+                if (!devices.includes(deviceId)) {
+                    if (devices.length >= 3) {
+                        setAuthError("Tài khoản đã đăng nhập quá 3 thiết bị.");
+                        // Nếu vượt quá giới hạn, sign out ngay lập tức
+                        await signOut(auth);
+                        return false;
+                    } else {
+                        devices.push(deviceId);
+                    }
+                }
+
+                try {
+                    const accountRef = getAccountRef(userAccount.email);
+                    const deviceName = getDeviceLabel();
+                    const now = Date.now();
+                    const updatedSessions = [
+                        ...sessions.filter(session => session.id !== deviceId),
+                        { id: deviceId, name: deviceName, lastActive: now }
+                    ];
+                    await updateDoc(accountRef, { devices, deviceSessions: updatedSessions });
+                } catch (e) {
+                    console.warn("Lỗi cập nhật thiết bị:", e);
+                    // Nếu lỗi permissions khi update, ném lại để AuthScreen xử lý
+                    if (e.code === 'permission-denied' || e.message?.includes('permission')) {
+                        throw new Error("Không có quyền cập nhật thông tin thiết bị. Vui lòng kiểm tra Firestore rules.");
+                    }
+                    // Các lỗi khác không nghiêm trọng, tiếp tục
+                }
+            } catch (error) {
+                console.error("Lỗi trong quá trình login:", error);
+                // Ném lại lỗi để AuthScreen xử lý
+                throw error;
             }
         } else {
             // Nếu là ẩn danh, gán UID thật từ Firebase
@@ -3635,6 +3930,7 @@ export const useQuizRunner = (currentProfile, config) => {
     const [questionStartTime, setQuestionStartTime] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [preloadedQuiz, setPreloadedQuiz] = useState(null);
+    const [attemptCount, setAttemptCount] = useState(0);
 
     const generateQuizQuestions = useCallback(async (isBackground = false) => {
         if (!currentProfile) return null;
@@ -3776,6 +4072,7 @@ export const useQuizRunner = (currentProfile, config) => {
         setCurrentQIndex(0); setSessionScore(0); setHistory([]);
         setSelectedOption(null); setIsSubmitted(false);
         setQuestionStartTime(Date.now());
+        setAttemptCount(0);
     };
 
     const handleSelectOption = (userAnswerData) => {
@@ -3801,11 +4098,24 @@ export const useQuizRunner = (currentProfile, config) => {
             isCorrect = normalizeVal(userAnswerData) === normalizeVal(currentQ.correctVal);
         }
 
+        const newAttemptCount = attemptCount + 1;
+        setAttemptCount(newAttemptCount);
+
+        // Tính điểm: Nếu đúng ở lần 2, chỉ cộng 50% điểm
         if (isCorrect) {
-            setSessionScore(prev => prev + (REWARD_PER_LEVEL[currentQ.level] || 200));
+            const baseReward = REWARD_PER_LEVEL[currentQ.level] || 200;
+            const finalReward = newAttemptCount === 2 ? Math.floor(baseReward * 0.5) : baseReward;
+            setSessionScore(prev => prev + finalReward);
         }
-        setHistory(prev => [...prev, { ...currentQ, userAnswer: displayAnswer, isCorrect, timeTaken }]);
+        
+        setHistory(prev => [...prev, { ...currentQ, userAnswer: displayAnswer, isCorrect, timeTaken, attemptCount: newAttemptCount }]);
         setIsSubmitted(true);
+    };
+
+    const resetCurrentQuestion = () => {
+        setSelectedOption(null);
+        setIsSubmitted(false);
+        // Giữ nguyên attemptCount để tiếp tục đếm
     };
 
     const nextQuestion = () => {
@@ -3813,6 +4123,7 @@ export const useQuizRunner = (currentProfile, config) => {
             setCurrentQIndex(prev => prev + 1);
             setSelectedOption(null); setIsSubmitted(false);
             setQuestionStartTime(Date.now());
+            setAttemptCount(0); // Reset attempt count khi chuyển câu
             return true; 
         }
         return false; 
@@ -3821,7 +4132,8 @@ export const useQuizRunner = (currentProfile, config) => {
     return {
         quizData, currentQIndex, selectedOption, isSubmitted, sessionScore, history,
         isGenerating, setIsGenerating, preloadedQuiz, setPreloadedQuiz,
-        generateQuizQuestions, startSession, handleSelectOption, nextQuestion
+        attemptCount, setAttemptCount,
+        generateQuizQuestions, startSession, handleSelectOption, nextQuestion, resetCurrentQuestion
     };
 };
 
@@ -4565,9 +4877,22 @@ export const secureUpdatePiggyBank = async (delta, reason) => {
     if (!functions) {
         throw new Error('Firebase chưa được khởi tạo.');
     }
-    const fn = httpsCallable(functions, 'updatePiggyBank');
-    const res = await fn({ delta, reason, appId });
-    return res.data;
+    
+    try {
+        const fn = httpsCallable(functions, 'updatePiggyBank');
+        const res = await fn({ delta, reason, appId });
+        return res.data;
+    } catch (error) {
+        // Xử lý lỗi CORS hoặc network
+        if (error.code === 'functions/unavailable' || 
+            error.message?.includes('CORS') || 
+            error.message?.includes('network') ||
+            error.code === 'internal') {
+            console.warn("Cloud Function không khả dụng, có thể chưa được deploy:", error);
+            throw new Error('Cloud Function chưa sẵn sàng. Vui lòng thử lại sau hoặc liên hệ admin để deploy function.');
+        }
+        throw error;
+    }
 };
 
 

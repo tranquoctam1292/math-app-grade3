@@ -41,21 +41,24 @@ const cleanMathText = (text) => {
         .replace(/giá trị của biểu thức/g, '')
         .replace(/tính nhẩm/g, '')
         .replace(/tính/g, '')
-        .replace(/so sánh/g, '')
+        .replace(/so sánh.*?(:|hai biểu thức sau|biểu thức)/g, '') // Bỏ "So sánh hai biểu thức sau:"
         .replace(/hãy chọn/g, '')
         .replace(/tìm x,? biết/g, '') // Bỏ "Tìm x biết"
         .replace(/tìm y,? biết/g, '')
-        .replace(/x\s*=/g, '') // Bỏ "x =" nếu có
+        .replace(/x\s*=/g, '') // Bỏ "x =" nếu có (nhưng không bỏ dấu nhân "x")
+        .replace(/hai biểu thức sau/g, '') // Bỏ "hai biểu thức sau"
         .replace(/:/g, '') // Bỏ dấu hai chấm ở cuối câu dẫn
         .trim();
 };
 
 export const solveSimpleExpression = (text) => {
     try {
+        if (!text || typeof text !== 'string') return null;
+        
         // Làm sạch text trước khi tính
         let clean = cleanMathText(text)
-            .replace(/x/g, '*')
-            .replace(/×/g, '*')
+            .replace(/×/g, '*') // Thay × trước
+            .replace(/\s*x\s*/g, '*') // Thay " x " (dấu nhân) nhưng không thay "x" trong biến
             .replace(/:/g, '/')
             .replace(/÷/g, '/')
             .replace(/của/g, '*')
@@ -65,12 +68,14 @@ export const solveSimpleExpression = (text) => {
         // Xử lý trường hợp chỉ còn lại số (ví dụ: " 500 ")
         if (/^-?\d+(\.\d+)?$/.test(clean)) return parseFloat(clean);
 
-        // Nếu chuỗi rỗng hoặc chứa ký tự lạ, return null
-        if (!clean || /[a-zđ]/.test(clean)) return null;
+        // Nếu chuỗi rỗng hoặc chứa ký tự chữ cái (trừ dấu toán học), return null
+        // Cho phép: số, dấu +, -, *, /, dấu ngoặc, dấu chấm thập phân
+        if (!clean || /[a-zđ]/i.test(clean.replace(/[0-9+\-*/().\s]/g, ''))) return null;
 
         const result = evaluate(clean);
         return (isFinite(result) && !isNaN(result)) ? parseFloat(result.toFixed(2)) : null; 
-    } catch {
+    } catch (e) {
+        console.warn("solveSimpleExpression error:", e, "Text:", text);
         return null;
     }
 };
@@ -122,27 +127,55 @@ export const solveComparison = (text) => {
         // Ví dụ: "Điền dấu...: 15 + 9 ... 32 - 8" -> "15 + 9 ... 32 - 8"
         const clean = cleanMathText(text);
 
-        // 2. Tách 2 vế
-        const parts = clean.split(/(?:\.\.+|_+|\?|;|với|\s{2,})/i);
+        // 2. Tách 2 vế - cải thiện pattern để bắt nhiều format hơn
+        // Pattern: tìm dấu ... hoặc khoảng trắng lớn hoặc dấu phân cách
+        let parts = clean.split(/(?:\.\.+|_+|…|___|\s{3,}|\s+với\s+|\s+so\s+với\s+)/i);
+        
+        // Nếu không tìm thấy, thử tách bằng dấu toán học ở giữa
+        if (parts.length < 2) {
+            // Tìm pattern: "biểu thức1 ... biểu thức2" hoặc "biểu thức1 ? biểu thức2"
+            const match = clean.match(/([^...]+?)(?:\.\.+|_+|…|___|\?)([^...]+)/);
+            if (match) {
+                parts = [match[1].trim(), match[2].trim()];
+            } else {
+                // Thử tách bằng dấu toán học: tìm vị trí có dấu +, -, x, / ở giữa
+                const mathOpMatch = clean.match(/(.+?[+\-×x*÷/]\d+)\s*(?:\.\.+|_+|…|___|\?)\s*(.+?[+\-×x*÷/]\d+)/);
+                if (mathOpMatch) {
+                    parts = [mathOpMatch[1].trim(), mathOpMatch[2].trim()];
+                }
+            }
+        }
         
         // Lấy phần tử đầu và cuối có nội dung
         const validParts = parts.filter(p => p.trim().length > 0);
         
-        if (validParts.length < 2) return null;
+        if (validParts.length < 2) {
+            console.warn("solveComparison: Không tìm thấy 2 vế trong:", text);
+            return null;
+        }
 
-        const leftStr = validParts[0];
-        const rightStr = validParts[validParts.length - 1];
+        const leftStr = validParts[0].trim();
+        const rightStr = validParts[validParts.length - 1].trim();
 
         const val1 = solveSimpleExpression(leftStr);
         const val2 = solveSimpleExpression(rightStr);
 
-        if (val1 === null || val2 === null || isNaN(val1) || isNaN(val2)) return null;
+        if (val1 === null || val2 === null || isNaN(val1) || isNaN(val2)) {
+            console.warn("solveComparison: Không tính được giá trị:", { leftStr, rightStr, val1, val2 });
+            return null;
+        }
 
+        // So sánh với độ chính xác số thập phân
+        const diff = Math.abs(val1 - val2);
+        const epsilon = 0.001; // Ngưỡng sai số cho số thập phân
+        
+        if (diff < epsilon) return '=';
         if (val1 > val2) return '>';
         if (val1 < val2) return '<';
-        return '='; 
+        
+        return '='; // Fallback
     } catch (e) { 
-        console.error("Lỗi tính so sánh:", e);
+        console.error("Lỗi tính so sánh:", e, "Text:", text);
         return null;
     }
 };
