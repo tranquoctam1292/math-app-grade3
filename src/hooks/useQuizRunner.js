@@ -51,7 +51,7 @@ export const useQuizRunner = (currentProfile, config) => {
         Mã phiên: ${randomSeed}. Vai trò: GV Toán lớp 3. Tạo 10 câu hỏi JSON.
         BỐI CẢNH: ${config.semester === 'hk1' ? 'HK1' : 'HK2'}. Chủ đề: ${randomTheme}.
         NỘI DUNG TẬP TRUNG: ${topicLabels}.
-        YÊU CẦU: ${dynamicConstraint}
+        YÊU CẦU: ${dynamicConstraint}. Câu văn ngắn gọn, rõ ràng chủ ngữ vị ngữ. TUYỆT ĐỐI KHÔNG dùng đơn vị "tá" (hãy dùng số 12), "lạng" (hãy dùng 100g) hay các từ ngữ ít gặp. Sử dụng đơn vị chuẩn SGK: kg, g, lít, ml, km, m, cm, mm, phút, giờ, đồng. Tránh đánh đố về mặt câu chữ, chỉ kiểm tra tư duy toán học.
         QUY TẮC: 'correctVal' là số/từ đơn giản. 'options' đủ 4 giá trị.
         TYPES: mcq(40%), fill_blank(20%), comparison(10%), sorting(15%), matching(15%).
         OUTPUT JSON SCHEMA.

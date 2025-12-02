@@ -126,41 +126,25 @@ export const solveEquation = (text) => {
 
 export const solveComparison = (text) => {
     try {
-        if (!text.includes('...') && !text.includes(' với ')) return null;
-
-        const separator = text.includes('...') ? '...' : ' với ';
-        const parts = text.split(separator);
+        // 1. Dùng Regex để tách 2 vế. 
+        // Chấp nhận: ... (3 chấm), .. (2 chấm), ____ (gạch dưới), ? (dấu hỏi), hoặc chữ "với"
+        const parts = text.split(/(?:\.\.+|_+|\?|\svới\s)/i);
         
-        if (parts.length !== 2) return null;
+        if (parts.length < 2) return null;
 
-        const calcSide = (str) => {
-            let clean = str.toLowerCase()
-                .replace(/so sánh/g, '')
-                .replace(/điền dấu/g, '')
-                .replace(/compare/g, '')
-                .replace(/x/g, '*')
-                .replace(/×/g, '*')
-                .replace(/:/g, '/')
-                .replace(/÷/g, '/')
-                .replace(/của/g, '*') // ✅ THÊM
-                .trim();
-            
-            try {
-                return evaluate(clean);
-            } catch {
-                return null;
-            }
-        };
-
-        const val1 = calcSide(parts[0]);
-        const val2 = calcSide(parts[1]);
+        // 2. Tận dụng hàm solveSimpleExpression đã có để tính giá trị 2 vế
+        // Lấy phần tử đầu và phần tử cuối (tránh trường hợp split ra rác ở giữa)
+        const val1 = solveSimpleExpression(parts[0]);
+        const val2 = solveSimpleExpression(parts[parts.length - 1]);
 
         if (val1 === null || val2 === null || isNaN(val1) || isNaN(val2)) return null;
 
+        // 3. So sánh và trả về dấu chuẩn
         if (val1 > val2) return '>';
         if (val1 < val2) return '<';
-        return '='; // Trả về symbol chuẩn
-    } catch { 
+        return '='; 
+    } catch (e) { 
+        console.error("Lỗi tính so sánh:", e);
         return null;
     }
 };

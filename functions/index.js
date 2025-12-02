@@ -36,6 +36,12 @@ exports.generateQuestions = onCall({
         const jsonInstruction = `
         Bạn là chuyên gia giáo dục Toán tiểu học.
         Nhiệm vụ: Tạo danh sách câu hỏi toán học dựa trên yêu cầu dưới đây.
+        YÊU CẦU QUAN TRỌNG VỀ NỘI DUNG:
+        1. Ngôn ngữ: Tiếng Việt tự nhiên, đơn giản, dễ hiểu, thân thiện với trẻ em.
+        2. Tránh từ ngữ Hán Việt phức tạp hoặc câu văn quá dài dòng.
+        3. Các con số trong đề bài phải hợp lý với thực tế.
+        4. Nếu là bài toán đố, hãy dùng tên thân thuộc (Lan, Minh...) hoặc con vật.
+        5. KHÔNG SỬ DỤNG các đơn vị đo lường không phổ biến với trẻ nhỏ như: "tá" (thay bằng 12), "yến/tạ/tấn" (nếu chưa học), "lạng". Hãy ưu tiên dùng số cụ thể.
         
         YÊU CẦU OUTPUT:
         Trả về một mảng JSON (JSON Array) chứa các object câu hỏi. Ví dụ:
