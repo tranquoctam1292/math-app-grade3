@@ -1,7 +1,7 @@
 // src/hooks/useUserData.js
 import { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db, appId, auth } from '../lib/firebase'; // ✅ Thêm auth vào import
+import { db, appId, auth } from '../lib/firebase';
 import { SEMESTER_DEFAULT_TOPICS } from '../lib/constants';
 
 export const useUserData = (appUser) => {
@@ -14,18 +14,23 @@ export const useUserData = (appUser) => {
         semester: 'hk2',
         selectedTopics: SEMESTER_DEFAULT_TOPICS['hk2'],
     });
-    const [isLoadingData, setIsLoadingData] = useState(false);
+    
+    // ✅ FIX LỖI F5: Mặc định là TRUE để App chờ tải dữ liệu xong mới quyết định hiển thị gì
+    // Tránh việc ProfileScreen thấy list rỗng (do chưa tải) mà vội vàng hiện popup tạo mới
+    const [isLoadingData, setIsLoadingData] = useState(true);
 
     // Load data khi user thay đổi
     useEffect(() => {
         const loadData = async () => {
-            // ✅ FIX: Chỉ load khi đã có appUser VÀ Firebase Auth đã sẵn sàng
+            // Nếu chưa có user, tắt loading để App xử lý luồng Auth
             if (!appUser || !appUser.uid || !auth.currentUser) {
-                // Chưa sẵn sàng load
+                setIsLoadingData(false);
                 return;
             }
             
+            // Bắt đầu tải, đảm bảo loading là true
             setIsLoadingData(true);
+            
             try {
                 const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
                 const userDocSnap = await getDoc(userDocRef);
@@ -57,19 +62,20 @@ export const useUserData = (appUser) => {
                 }
             } catch (e) {
                 console.error("Lỗi load user data:", e);
-                // ✅ FIX: Tự động reset nếu lỗi quyền truy cập (Permission Denied)
+                // Tự động reset nếu lỗi quyền truy cập
                 if (e.code === 'permission-denied' || e.message.includes('Missing or insufficient permissions')) {
                     console.warn("Phát hiện lỗi session cũ, đang reset...");
                     localStorage.removeItem('math_app_user_session');
-                    window.location.reload(); // Tải lại trang để tạo session mới
+                    window.location.reload();
                 }
             } finally {
+                // ✅ Luôn tắt loading khi xong việc (dù thành công hay thất bại)
                 setIsLoadingData(false);
             }
         };
 
         loadData();
-    }, [appUser]); // Dependency
+    }, [appUser]);
 
     // Hàm helper để save nhanh
     const saveData = async (newData) => {
