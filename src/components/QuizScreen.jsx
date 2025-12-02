@@ -76,12 +76,15 @@ const buildGeometrySvg = (question) => {
         <text x="${(300 + width) / 2 + 10}" y="110" font-size="14" fill="#374151" font-weight="bold" transform="rotate(-90 ${(300 + width) / 2 + 10},110)">${nums[1] || nums[0] || 5} cm</text>`;
 };
 
-const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion }) => {
+const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion, attemptCount, resetCurrentQuestion }) => {
     const q = quizData[currentQIndex];
     const geometrySvg = buildGeometrySvg(q);
     const progress = ((currentQIndex + 1) / quizData.length) * 100;
     
     if (!q) return <div className="p-6 text-center">Đang tải...</div>;
+
+    // Kiểm tra xem có phải True/False (comparison) không
+    const isTrueFalseType = q.type === 'comparison';
 
     // ✅ SỬA ĐỔI: Logic kiểm tra đúng sai nhất quán với MathApp.js
     let isCorrect = false;
@@ -163,9 +166,98 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                 {/* Question Box (Chỉ hiện text ở đây nếu ko phải FillBlank - vì FillBlank đã tích hợp text bên trong) */}
                 {q.type !== 'fill_blank' && (
                     <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6 shrink-0">
-                        <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
-                            <MathText text={q.text} />
-                        </div>
+                        {/* Với comparison, cần parse và hiển thị biểu thức rõ ràng hơn */}
+                        {q.type === 'comparison' ? (
+                            <div className="text-center">
+                                <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed mb-4">
+                                    {q.text.includes('So sánh') || q.text.includes('so sánh') 
+                                        ? 'So sánh hai biểu thức sau:'
+                                        : q.text.includes('Điền dấu') || q.text.includes('điền dấu')
+                                        ? 'Điền dấu thích hợp:'
+                                        : 'So sánh:'
+                                    }
+                                </div>
+                                {/* Parse và hiển thị biểu thức từ text hoặc explanation */}
+                                {(() => {
+                                    let expressionPart = '';
+                                    
+                                    // 1. Thử tìm biểu thức trong text (sau dấu hai chấm)
+                                    const textParts = q.text.split(/[:：]/);
+                                    if (textParts.length > 1) {
+                                        const afterColon = textParts.slice(1).join(':').trim();
+                                        if (afterColon && afterColon.length > 2) {
+                                            expressionPart = afterColon;
+                                        }
+                                    }
+                                    
+                                    // 2. Nếu không tìm thấy, thử tìm pattern với dấu ... hoặc ___
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        const match = q.text.match(/([^:]+(?:\.\.\.|___|…|với)[^:]+)/);
+                                        if (match && match[1].trim().length > 2) {
+                                            expressionPart = match[1].trim();
+                                        }
+                                    }
+                                    
+                                    // 3. Nếu vẫn không tìm thấy, thử parse từ explanation
+                                    if ((!expressionPart || expressionPart.length < 3) && q.explanation) {
+                                        // Pattern 1: "125 + 75 = 200; 250 - 40 = 210. Vì 200 < 210 nên 125 + 75 < 250 - 40"
+                                        const expMatch1 = q.explanation.match(/(\d+\s*[+\-×x*÷/]\s*\d+)\s*=\s*\d+\s*[;,]?\s*(\d+\s*[+\-×x*÷/]\s*\d+)\s*=\s*\d+/);
+                                        if (expMatch1) {
+                                            expressionPart = `${expMatch1[1].trim()} ... ${expMatch1[2].trim()}`;
+                                        } else {
+                                            // Pattern 2: "125 + 75 < 250 - 40" (trực tiếp trong explanation)
+                                            const expMatch2 = q.explanation.match(/(\d+\s*[+\-×x*÷/]\s*\d+)\s*(<|>|=)\s*(\d+\s*[+\-×x*÷/]\s*\d+)/);
+                                            if (expMatch2) {
+                                                expressionPart = `${expMatch2[1].trim()} ... ${expMatch2[3].trim()}`;
+                                            } else {
+                                                // Pattern 3: Tìm bất kỳ biểu thức nào có dấu toán học
+                                                const expMatch3 = q.explanation.match(/([0-9]+\s*[+\-×x*÷/]\s*[0-9]+)\s*[^0-9+\-×x*÷/]*\s*([0-9]+\s*[+\-×x*÷/]\s*[0-9]+)/);
+                                                if (expMatch3) {
+                                                    expressionPart = `${expMatch3[1].trim()} ... ${expMatch3[2].trim()}`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // 4. Nếu vẫn không tìm thấy, loại bỏ phần câu dẫn và dùng phần còn lại của text
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        const cleaned = q.text
+                                            .replace(/^(So sánh|Điền dấu|so sánh|điền dấu).*?[:：]\s*/i, '')
+                                            .replace(/^(hai biểu thức sau|thích hợp)\s*/i, '')
+                                            .trim();
+                                        if (cleaned && cleaned.length > 2 && cleaned !== q.text) {
+                                            expressionPart = cleaned;
+                                        }
+                                    }
+                                    
+                                    // 5. Nếu vẫn rỗng, hiển thị text gốc (có thể text đã chứa biểu thức)
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        expressionPart = q.text;
+                                    }
+                                    
+                                    // Debug: Log để kiểm tra (chỉ trong dev mode)
+                                    if (import.meta.env.DEV) {
+                                        console.log('Comparison question:', {
+                                            text: q.text,
+                                            explanation: q.explanation,
+                                            parsed: expressionPart
+                                        });
+                                    }
+                                    
+                                    return (
+                                        <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200">
+                                            <div className="text-2xl sm:text-3xl font-black text-indigo-700 leading-relaxed">
+                                                <MathText text={expressionPart} />
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
+                                <MathText text={q.text} />
+                            </div>
+                        )}
                         {/* SVG Support */}
                         {geometrySvg && (
                             <div className="mt-4 flex justify-center animation-fade-in">
@@ -192,8 +284,48 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                 </div>
             </div>
 
-            {/* --- RESULT MODAL (POPUP) --- */}
-            {isSubmitted && (
+            {/* --- HINT MESSAGE (Khi sai lần đầu và không phải True/False) --- */}
+            {isSubmitted && !isCorrect && attemptCount === 1 && !isTrueFalseType && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animation-fade-in">
+                    <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-shake border-4 border-orange-200">
+                        <div className="p-6 text-center bg-orange-100">
+                            <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-3 shadow-sm border-4 border-white bg-orange-500 text-white">
+                                <Frown size={48} />
+                            </div>
+                            <h2 className="text-2xl font-black uppercase text-orange-700">
+                                Chưa đúng rồi!
+                            </h2>
+                            <p className="font-bold text-slate-600 text-sm mt-1">
+                                Thử tính lại xem!
+                            </p>
+                        </div>
+                        <div className="p-6 bg-white">
+                            <ClayButton 
+                                onClick={() => {
+                                    // Reset để cho phép thử lại
+                                    if (resetCurrentQuestion) {
+                                        resetCurrentQuestion();
+                                    }
+                                }}
+                                colorClass="bg-orange-500 text-white" 
+                                className="w-full h-14 font-black text-xl flex items-center justify-center gap-2 !rounded-xl shadow-lg"
+                            >
+                                Thử Lại
+                            </ClayButton>
+                            <ClayButton 
+                                onClick={handleNextQuestion} 
+                                colorClass="bg-slate-200 text-slate-700" 
+                                className="w-full h-12 font-bold text-sm flex items-center justify-center gap-2 !rounded-xl mt-3"
+                            >
+                                Bỏ Qua
+                            </ClayButton>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- RESULT MODAL (POPUP) - Chỉ hiện khi attemptCount >= 2 hoặc là True/False --- */}
+            {isSubmitted && (attemptCount >= 2 || isTrueFalseType || isCorrect) && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animation-fade-in">
                     <div className={`w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-shake border-4 ${isCorrect ? 'border-green-200' : 'border-red-200'}`}>
                         {/* Modal Header */}
@@ -205,7 +337,10 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                                 {isCorrect ? "Hoan hô!" : "Tiếc quá!"}
                             </h2>
                             <p className="font-bold text-slate-600 text-sm mt-1">
-                                {isCorrect ? "Bé giỏi quá đi thôi!" : "Không sao, thử lại lần sau nhé."}
+                                {isCorrect 
+                                    ? (attemptCount === 2 ? "Đúng rồi! (Đã trừ 50% điểm thưởng)" : "Bé giỏi quá đi thôi!")
+                                    : "Không sao, thử lại lần sau nhé."
+                                }
                             </p>
                         </div>
 

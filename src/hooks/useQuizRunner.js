@@ -37,6 +37,7 @@ export const useQuizRunner = (currentProfile, config) => {
     const [questionStartTime, setQuestionStartTime] = useState(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [preloadedQuiz, setPreloadedQuiz] = useState(null);
+    const [attemptCount, setAttemptCount] = useState(0);
 
     const generateQuizQuestions = useCallback(async (isBackground = false) => {
         if (!currentProfile) return null;
@@ -178,6 +179,7 @@ export const useQuizRunner = (currentProfile, config) => {
         setCurrentQIndex(0); setSessionScore(0); setHistory([]);
         setSelectedOption(null); setIsSubmitted(false);
         setQuestionStartTime(Date.now());
+        setAttemptCount(0);
     };
 
     const handleSelectOption = (userAnswerData) => {
@@ -203,11 +205,24 @@ export const useQuizRunner = (currentProfile, config) => {
             isCorrect = normalizeVal(userAnswerData) === normalizeVal(currentQ.correctVal);
         }
 
+        const newAttemptCount = attemptCount + 1;
+        setAttemptCount(newAttemptCount);
+
+        // Tính điểm: Nếu đúng ở lần 2, chỉ cộng 50% điểm
         if (isCorrect) {
-            setSessionScore(prev => prev + (REWARD_PER_LEVEL[currentQ.level] || 200));
+            const baseReward = REWARD_PER_LEVEL[currentQ.level] || 200;
+            const finalReward = newAttemptCount === 2 ? Math.floor(baseReward * 0.5) : baseReward;
+            setSessionScore(prev => prev + finalReward);
         }
-        setHistory(prev => [...prev, { ...currentQ, userAnswer: displayAnswer, isCorrect, timeTaken }]);
+        
+        setHistory(prev => [...prev, { ...currentQ, userAnswer: displayAnswer, isCorrect, timeTaken, attemptCount: newAttemptCount }]);
         setIsSubmitted(true);
+    };
+
+    const resetCurrentQuestion = () => {
+        setSelectedOption(null);
+        setIsSubmitted(false);
+        // Giữ nguyên attemptCount để tiếp tục đếm
     };
 
     const nextQuestion = () => {
@@ -215,6 +230,7 @@ export const useQuizRunner = (currentProfile, config) => {
             setCurrentQIndex(prev => prev + 1);
             setSelectedOption(null); setIsSubmitted(false);
             setQuestionStartTime(Date.now());
+            setAttemptCount(0); // Reset attempt count khi chuyển câu
             return true; 
         }
         return false; 
@@ -223,6 +239,7 @@ export const useQuizRunner = (currentProfile, config) => {
     return {
         quizData, currentQIndex, selectedOption, isSubmitted, sessionScore, history,
         isGenerating, setIsGenerating, preloadedQuiz, setPreloadedQuiz,
-        generateQuizQuestions, startSession, handleSelectOption, nextQuestion
+        attemptCount, setAttemptCount,
+        generateQuizQuestions, startSession, handleSelectOption, nextQuestion, resetCurrentQuestion
     };
 };

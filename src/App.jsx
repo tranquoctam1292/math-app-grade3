@@ -148,7 +148,7 @@ const MathApp = () => {
             }
 
             // Không tìm thấy profile để restore → đánh dấu đã xử lý để không lặp lại
-            setHasRestoredProfile(true);
+            setTimeout(() => setHasRestoredProfile(true), 0);
         }
     }, [isLoadingData, profiles, currentProfile, gameState, hasRestoredProfile]);
 
@@ -329,9 +329,22 @@ const MathApp = () => {
             case 'home': 
                 return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={gameRunner.isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} onOpenConfig={() => requestParentGate('config', () => setGameState('config'))} />;
             case 'playing': 
-                return <React.Suspense fallback={<Loader/>}><QV quizData={gameRunner.quizData} currentQIndex={gameRunner.currentQIndex} setGameState={setGameState} sessionScore={gameRunner.sessionScore} selectedOption={gameRunner.selectedOption} isSubmitted={gameRunner.isSubmitted} handleSelectOption={gameRunner.handleSelectOption} handleNextQuestion={handleNextQuestionWrapper} /></React.Suspense>;
+                return <React.Suspense fallback={<Loader/>}><QV quizData={gameRunner.quizData} currentQIndex={gameRunner.currentQIndex} setGameState={setGameState} sessionScore={gameRunner.sessionScore} selectedOption={gameRunner.selectedOption} isSubmitted={gameRunner.isSubmitted} handleSelectOption={gameRunner.handleSelectOption} handleNextQuestion={handleNextQuestionWrapper} attemptCount={gameRunner.attemptCount} resetCurrentQuestion={gameRunner.resetCurrentQuestion} /></React.Suspense>;
             case 'result': 
-                return <ResultScreen history={gameRunner.history} sessionScore={gameRunner.sessionScore} setGameState={setGameState} currentProfile={currentProfile} />;
+                return (
+                    <ResultScreen 
+                        history={gameRunner.history} 
+                        sessionScore={gameRunner.sessionScore} 
+                        setGameState={setGameState} 
+                        currentProfile={currentProfile} 
+                        onRetryWrongQuestions={(wrongQuestions) => {
+                            if (!wrongQuestions || wrongQuestions.length === 0) return;
+                            // Khởi động một mini-session chỉ với các câu sai
+                            gameRunner.startSession(wrongQuestions);
+                            setGameState('playing');
+                        }}
+                    />
+                );
             case 'config': 
                 return <ConfigScreen config={config} saveConfig={saveConfigWrapper} setGameState={setGameState} />;
             case 'user_profile': 
