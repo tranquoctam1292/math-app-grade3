@@ -65,7 +65,6 @@ export const useQuizRunner = (currentProfile, config) => {
                 };
                 
                 // --- LOGIC TỰ SỬA LỖI AI (SELF-CORRECTION) ---
-                // Tính toán lại giá trị đúng dựa trên đề bài để đảm bảo chính xác 100%
                 let computedVal = null;
 
                 if (processedQ.type === 'comparison') {
@@ -76,26 +75,19 @@ export const useQuizRunner = (currentProfile, config) => {
                     computedVal = solveSimpleExpression(processedQ.text);
                 }
 
-                // Nếu Client tính được kết quả, hãy GHI ĐÈ kết quả của AI
                 if (computedVal !== null && !isNaN(computedVal)) {
-                    // Chuẩn hóa computedVal về string để so sánh
                     const correctStr = String(computedVal);
-                    
-                    // Ghi đè correctVal
                     processedQ.correctVal = correctStr;
 
-                    // Đối với MCQ, nếu đáp án đúng không có trong options, phải thay thế 1 option
                     if (processedQ.type === 'mcq' && Array.isArray(processedQ.options)) {
                         const hasCorrectOption = processedQ.options.some(opt => normalizeVal(opt) === normalizeVal(correctStr));
-                        
                         if (!hasCorrectOption) {
-                            // Thay thế option đầu tiên (hoặc ngẫu nhiên) bằng đáp án đúng
                             processedQ.options[Math.floor(Math.random() * 4)] = correctStr;
                         }
                     }
                 }
 
-                // --- FIX SORTING (Giữ nguyên logic cũ) ---
+                // --- FIX SORTING ---
                 if (processedQ.type === 'sorting') {
                     if (!processedQ.items || processedQ.items.length === 0) {
                         let foundItems = processedQ.text.match(/\d+\s*\/\s*\d+/g);
@@ -112,14 +104,15 @@ export const useQuizRunner = (currentProfile, config) => {
                                 return processedQ.text.toLowerCase().includes('giảm') ? valB - valA : valA - valB;
                             });
                             processedQ.correctOrder = sorted;
-                        } catch (e) {
+                        } catch {
+                            // ✅ FIX: Bỏ biến 'e' không dùng
                             processedQ.correctOrder = processedQ.items.sort(); 
                         }
                     }
                     if (processedQ.items) processedQ.items = [...processedQ.items].sort(() => Math.random() - 0.5);
                 }
 
-                // --- FIX MATCHING (Giữ nguyên logic cũ) ---
+                // --- FIX MATCHING ---
                 if (processedQ.type === 'matching') {
                     if (!processedQ.pairs || processedQ.pairs.length === 0) {
                         try {
@@ -137,20 +130,18 @@ export const useQuizRunner = (currentProfile, config) => {
 
                             const numPattern = /[1-4]\s*[).:-]\s*[^,;\n]+/g; 
                             let leftRaw = extractItems(splitParts[0], numPattern);
-                            let rightRaw = extractItems(splitParts[splitParts.length - 1], numPattern);
+                            // ✅ FIX: Xóa 'rightRaw' vì không dùng đến
                             
                             if (leftRaw.length === 0) {
-                                // Fallback: Thử lấy phép tính
-                                leftRaw = processedQ.text.match(/\d+\s*[\+\-\x\*]\s*\d+/g) || [];
+                                // ✅ FIX: Sửa lỗi Regex "Unnecessary escape character" (\+ -> +, \* -> *)
+                                leftRaw = processedQ.text.match(/\d+\s*[+\-x*]\s*\d+/g) || [];
                             }
 
                             const newPairs = [];
                             leftRaw.forEach(leftExpr => {
                                 const solvedLeft = solveSimpleExpression(leftExpr);
                                 if (solvedLeft !== null) {
-                                    // Tìm trong text xem có kết quả của phép tính này không
                                     const matchRight = String(solvedLeft);
-                                    // Kiểm tra xem số này có xuất hiện trong rightRaw hoặc trong text gốc không
                                     if (processedQ.text.includes(matchRight)) {
                                          newPairs.push({ left: leftExpr, right: matchRight });
                                     }
