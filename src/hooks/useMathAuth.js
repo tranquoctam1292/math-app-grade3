@@ -39,7 +39,9 @@ export const useMathAuth = () => {
                     try {
                         const parsedUser = JSON.parse(savedSession);
                         // Đảm bảo UID luôn đúng với phiên hiện tại
-                        const finalUid = parsedUser.isAnon ? u.uid : parsedUser.uid;
+                        // CHỈNH SỬA TẠI ĐÂY: Luôn sử dụng u.uid
+                        const finalUid = u.uid; 
+                        
                         setAppUser({ ...parsedUser, uid: finalUid });
                     } catch { 
                         localStorage.removeItem('math_app_user_session'); 

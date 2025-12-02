@@ -2,18 +2,22 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Cho phép bất kỳ ai đã đăng nhập (bao gồm Ẩn danh) được đọc/ghi
-    // Điều này giúp tránh lỗi permission trong quá trình dev
+    // Rule hiện tại (giữ nguyên)
     match /artifacts/{appId}/public/data/math_user_data/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Rule cho feedback (giữ nguyên)
+    // Rule feedback (giữ nguyên)
     match /artifacts/{appId}/public/data/app_feedbacks/{document=**} {
       allow create: if request.auth != null;
     }
+
+    // --- THÊM MỚI: Rule cho math_accounts ---
+    match /artifacts/{appId}/public/data/math_accounts/{document=**} {
+      // Chỉ cho phép update nếu đã đăng nhập
+      allow read, write: if request.auth != null;
+    }
     
-    // Mặc định chặn các truy cập lạ khác
     match /{document=**} {
       allow read, write: if false;
     }

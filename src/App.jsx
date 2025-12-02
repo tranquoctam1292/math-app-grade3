@@ -112,6 +112,12 @@ const MathApp = () => {
         }
     };
 
+    // Hàm wrapper để vừa set profile vừa chuyển màn hình
+    const handleSelectProfile = (profile) => {
+        setCurrentProfile(profile);
+        setGameState('home'); // <--- Thêm dòng này để chuyển vào màn hình chính
+    };
+
     const handleStartQuiz = async () => {
         if (!currentProfile) { showNotification('error', "Chọn hồ sơ trước!"); return; }
         gameRunner.setIsGenerating(true);
@@ -219,7 +225,18 @@ const MathApp = () => {
             case 'auth': 
                 return <AuthScreen onLoginSuccess={handleLogin} errorMsg={authError} setErrorMsg={setAuthError} />;
             case 'profile_select': 
-                return <ProfileScreen profiles={profiles} setCurrentProfile={setCurrentProfile} isCreatingProfile={isCreatingProfile} setIsCreatingProfile={setIsCreatingProfile} newProfileName={newProfileName} setNewProfileName={setNewProfileName} newProfileAvatar={newProfileAvatar} setNewProfileAvatar={setNewProfileAvatar} createProfile={createProfileWrapper} appUser={appUser} />;
+                return <ProfileScreen 
+                    profiles={profiles} 
+                    setCurrentProfile={handleSelectProfile} // <--- ĐÃ THAY ĐỔI
+                    isCreatingProfile={isCreatingProfile} 
+                    setIsCreatingProfile={setIsCreatingProfile} 
+                    newProfileName={newProfileName} 
+                    setNewProfileName={setNewProfileName} 
+                    newProfileAvatar={newProfileAvatar} 
+                    setNewProfileAvatar={setNewProfileAvatar} 
+                    createProfile={createProfileWrapper} 
+                    appUser={appUser} 
+                />;
             case 'home': 
                 return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={gameRunner.isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} />;
             case 'playing': 
