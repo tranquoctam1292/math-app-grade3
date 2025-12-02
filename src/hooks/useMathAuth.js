@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
     onAuthStateChanged, signInWithCustomToken, signOut 
 } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, appId } from '../lib/firebase';
-import { getDeviceId, encodeEmail } from '../lib/utils';
+import { getDeviceId, encodeEmail, getDeviceLabel } from '../lib/utils';
 
 export const useMathAuth = () => {
     const [appUser, setAppUser] = useState(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
     const [authError, setAuthError] = useState(null);
+    const [deviceSessions, setDeviceSessions] = useState([]);
 
     // Khởi tạo Auth
     useEffect(() => {
@@ -72,29 +73,109 @@ export const useMathAuth = () => {
 
     // Hàm Login (Xử lý logic device limit & merge user)
     // Hàm này được gọi SAU KHI Firebase đã sign-in thành công (bởi AuthScreen)
+    const getAccountRef = (email) => doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', encodeEmail(email));
+
+    const fetchAccountData = async (email) => {
+        if (!email) return { devices: [], deviceSessions: [] };
+        const currentUid = auth.currentUser?.uid;
+        if (!currentUid) {
+            throw new Error("Người dùng chưa được xác thực");
+        }
+        
+        const ref = getAccountRef(email);
+        try {
+            const snap = await getDoc(ref);
+            if (!snap.exists()) {
+                // Document chưa tồn tại, tạo mới
+                try {
+                    await setDoc(ref, { email, ownerUid: currentUid, devices: [], deviceSessions: [] });
+                    return { email, ownerUid: currentUid, devices: [], deviceSessions: [] };
+                } catch (createError) {
+                    console.error("Lỗi tạo document math_accounts:", createError);
+                    // Nếu lỗi permissions, ném lại để AuthScreen xử lý
+                    if (createError.code === 'permission-denied' || createError.message?.includes('permission')) {
+                        throw new Error("Không có quyền tạo tài khoản. Vui lòng kiểm tra Firestore rules.");
+                    }
+                    throw createError;
+                }
+            }
+            
+            // Document đã tồn tại, kiểm tra và cập nhật owner nếu cần
+            const data = snap.data();
+            
+            // Nếu document không có ownerUid hoặc ownerUid không khớp, cập nhật lại
+            // (Có thể do document được tạo từ trước khi có logic ownerUid)
+            if (!data.ownerUid || data.ownerUid !== currentUid) {
+                try {
+                    await updateDoc(ref, { ownerUid: currentUid });
+                    data.ownerUid = currentUid;
+                } catch (updateError) {
+                    console.warn("Không thể cập nhật ownerUid:", updateError);
+                    // Nếu không cập nhật được nhưng ownerUid rỗng, vẫn cho phép tiếp tục
+                    if (!data.ownerUid) {
+                        data.ownerUid = currentUid;
+                    } else {
+                        // Nếu ownerUid khác và không cập nhật được, ném lỗi
+                        throw new Error("Không có quyền truy cập tài khoản này. Chỉ chủ sở hữu mới có thể truy cập.");
+                    }
+                }
+            }
+            
+            return data;
+        } catch (error) {
+            console.error("Lỗi fetchAccountData:", error);
+            // Nếu lỗi permissions, ném lại để AuthScreen xử lý
+            if (error.code === 'permission-denied' || error.message?.includes('permission') || error.message?.includes('quyền')) {
+                throw new Error("Không có quyền truy cập dữ liệu tài khoản. Vui lòng kiểm tra Firestore rules.");
+            }
+            throw error;
+        }
+    };
+
     const login = async (userAccount) => {
         const deviceId = getDeviceId();
-        let devices = userAccount.devices || [];
+        let devices = [];
+        let sessions = [];
         const isAnon = userAccount.isAnon || false;
 
         if (!isAnon) {
-            if (!devices.includes(deviceId)) {
-                if (devices.length >= 3) {
-                    setAuthError("Tài khoản đã đăng nhập quá 3 thiết bị.");
-                    // Nếu vượt quá giới hạn, sign out ngay lập tức
-                    await signOut(auth);
-                    return false;
-                } else {
-                    devices.push(deviceId);
-                    try {
-                        const accountId = encodeEmail(userAccount.email);
-                        const accountRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_accounts', accountId);
-                        await updateDoc(accountRef, { devices });
-                    } catch (e) {
-                        console.warn("Lỗi cập nhật thiết bị:", e);
-                        // Không chặn login nếu lỗi cập nhật Firestore phụ
+            try {
+                const accountData = await fetchAccountData(userAccount.email);
+                devices = accountData.devices || [];
+                sessions = accountData.deviceSessions || [];
+
+                if (!devices.includes(deviceId)) {
+                    if (devices.length >= 3) {
+                        setAuthError("Tài khoản đã đăng nhập quá 3 thiết bị.");
+                        // Nếu vượt quá giới hạn, sign out ngay lập tức
+                        await signOut(auth);
+                        return false;
+                    } else {
+                        devices.push(deviceId);
                     }
                 }
+
+                try {
+                    const accountRef = getAccountRef(userAccount.email);
+                    const deviceName = getDeviceLabel();
+                    const now = Date.now();
+                    const updatedSessions = [
+                        ...sessions.filter(session => session.id !== deviceId),
+                        { id: deviceId, name: deviceName, lastActive: now }
+                    ];
+                    await updateDoc(accountRef, { devices, deviceSessions: updatedSessions });
+                } catch (e) {
+                    console.warn("Lỗi cập nhật thiết bị:", e);
+                    // Nếu lỗi permissions khi update, ném lại để AuthScreen xử lý
+                    if (e.code === 'permission-denied' || e.message?.includes('permission')) {
+                        throw new Error("Không có quyền cập nhật thông tin thiết bị. Vui lòng kiểm tra Firestore rules.");
+                    }
+                    // Các lỗi khác không nghiêm trọng, tiếp tục
+                }
+            } catch (error) {
+                console.error("Lỗi trong quá trình login:", error);
+                // Ném lại lỗi để AuthScreen xử lý
+                throw error;
             }
         } else {
             // Nếu là ẩn danh, gán UID thật từ Firebase
@@ -109,8 +190,25 @@ export const useMathAuth = () => {
     };
 
     // Hàm Logout
-    const logout = async () => {
+    const logout = useCallback(async () => {
         try {
+            const deviceId = getDeviceId();
+            const userEmail = appUser?.email;
+            const isAnon = appUser?.isAnon;
+            if (userEmail && !isAnon) {
+                try {
+                    const ref = getAccountRef(userEmail);
+                    const snap = await getDoc(ref);
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        const filteredDevices = (data.devices || []).filter(id => id !== deviceId);
+                        const filteredSessions = (data.deviceSessions || []).filter(sess => sess.id !== deviceId);
+                        await updateDoc(ref, { devices: filteredDevices, deviceSessions: filteredSessions });
+                    }
+                } catch (e) {
+                    console.warn("Không thể cập nhật danh sách thiết bị khi logout", e);
+                }
+            }
             await signOut(auth);
             setAppUser(null);
             localStorage.removeItem('math_app_user_session');
@@ -120,7 +218,44 @@ export const useMathAuth = () => {
             console.error("Lỗi Logout:", e);
             return false;
         }
+    }, [appUser]);
+
+    const remoteLogoutDevice = async (deviceId) => {
+        if (!appUser?.email) return { success: false, message: "Không có email để xác định tài khoản." };
+        try {
+            const ref = getAccountRef(appUser.email);
+            const snap = await getDoc(ref);
+            if (!snap.exists()) return { success: false, message: "Không tìm thấy dữ liệu tài khoản." };
+            const data = snap.data();
+            const updatedDevices = (data.devices || []).filter(id => id !== deviceId);
+            const updatedSessions = (data.deviceSessions || []).filter(sess => sess.id !== deviceId);
+            await updateDoc(ref, { devices: updatedDevices, deviceSessions: updatedSessions });
+            if (deviceId === getDeviceId()) {
+                await logout();
+            }
+            return { success: true, message: "Đã đăng xuất thiết bị khỏi tài khoản." };
+        } catch (error) {
+            console.error(error);
+            return { success: false, message: "Không thể đăng xuất thiết bị." };
+        }
     };
 
-    return { appUser, setAppUser, isAuthReady, authError, setAuthError, login, logout };
+    useEffect(() => {
+        if (!appUser?.email || appUser.isAnon) {
+            setTimeout(() => setDeviceSessions([]), 0);
+            return;
+        }
+        const ref = getAccountRef(appUser.email);
+        const unsubscribe = onSnapshot(ref, (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data();
+            setDeviceSessions(data.deviceSessions || []);
+            if (data.devices && !data.devices.includes(getDeviceId())) {
+                logout();
+            }
+        });
+        return () => unsubscribe();
+    }, [appUser?.email, appUser?.isAnon, logout]);
+
+    return { appUser, setAppUser, isAuthReady, authError, setAuthError, login, logout, deviceSessions, remoteLogoutDevice };
 };

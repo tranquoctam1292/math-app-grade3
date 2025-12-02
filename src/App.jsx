@@ -6,6 +6,7 @@ import { db, appId } from './lib/firebase';
 // ✅ FIX LỖI IMPORT Ở ĐÂY: Tách import ra đúng file
 import { fmt } from './lib/utils.js';
 import { TOPIC_TRANSLATIONS } from './lib/constants.js'; 
+import { secureUpdatePiggyBank } from './lib/piggyBank.js';
 
 // --- CUSTOM HOOKS ---
 import { useMathAuth } from './hooks/useMathAuth';
@@ -23,6 +24,7 @@ const ResultScreen = React.lazy(() => import('./components/ResultScreen'));
 const ReportScreen = React.lazy(() => import('./components/ReportScreen'));
 const ConfigScreen = React.lazy(() => import('./components/ConfigScreen'));
 const ShopScreen = React.lazy(() => import('./components/ShopScreen'));
+const ParentGateModal = React.lazy(() => import('./components/ParentGateModal'));
 
 // --- GLOBAL STYLES ---
 const GLOBAL_STYLES = `
@@ -38,12 +40,13 @@ const GLOBAL_STYLES = `
 
 const MathApp = () => {
     // 1. Hooks quản lý Logic
-    const { appUser, setAppUser, isAuthReady, authError, setAuthError, login, logout } = useMathAuth();
+    const { appUser, setAppUser, isAuthReady, authError, setAuthError, login, logout, deviceSessions, remoteLogoutDevice } = useMathAuth();
     
     const { 
         profiles, setProfiles, piggyBank, setPiggyBank, 
-        redemptionHistory, userStats, setUserStats, 
-        config, setConfig, isLoadingData, saveData, redeemCash 
+        redeemRequests, userStats, setUserStats, 
+        config, setConfig, isLoadingData, saveData, redeemCash,
+        parentSettings, updateParentSettings, approveRedemption, rejectRedemption
     } = useUserData(appUser);
     
     // 2. UI State
@@ -54,6 +57,40 @@ const MathApp = () => {
     const [newProfileAvatar, setNewProfileAvatar] = useState("🐶"); 
     const [appError, setAppError] = useState(null);
     const [notification, setNotification] = useState(null);
+    const [parentGateRequest, setParentGateRequest] = useState(null);
+    const [parentAccessUnlocked, setParentAccessUnlocked] = useState(false);
+    const parentGateTimerRef = useRef(null);
+    const parentAccessValid = parentAccessUnlocked;
+
+    const requestParentGate = (reason, onApproved) => {
+        if (parentAccessValid) {
+            onApproved();
+            return;
+        }
+        setParentGateRequest({ reason, onApproved });
+    };
+
+    const handleParentGateSuccess = () => {
+        const duration = (parentSettings?.unlockedSeconds || 300) * 1000;
+        setParentAccessUnlocked(true);
+        if (parentGateTimerRef.current) {
+            clearTimeout(parentGateTimerRef.current);
+            parentGateTimerRef.current = null;
+        }
+        parentGateTimerRef.current = setTimeout(() => {
+            setParentAccessUnlocked(false);
+            parentGateTimerRef.current = null;
+        }, duration);
+        const callback = parentGateRequest?.onApproved;
+        setParentGateRequest(null);
+        if (callback) callback();
+    };
+    useEffect(() => {
+        return () => {
+            if (parentGateTimerRef.current) clearTimeout(parentGateTimerRef.current);
+        };
+    }, []);
+
 
     // 3. Game Runner Hook
     const gameRunner = useQuizRunner(currentProfile, config, userStats);
@@ -85,8 +122,13 @@ const MathApp = () => {
         }
     }, [appUser, isAuthReady, gameState]);
 
-    // --- CẬP NHẬT: Logic tự động chọn lại Profile cũ ---
+    // --- CẬP NHẬT: Logic tự động chọn lại Profile cũ (chỉ chạy duy nhất 1 lần sau khi load) ---
+    const [hasRestoredProfile, setHasRestoredProfile] = useState(false);
+
     useEffect(() => {
+        // Nếu đã auto-restore 1 lần thì không chạy nữa (tránh nhấp nháy khi người dùng tự mở màn hình hồ sơ)
+        if (hasRestoredProfile) return;
+
         // Chỉ chạy khi đã tải xong dữ liệu và chưa chọn profile nào
         if (!isLoadingData && profiles.length > 0 && !currentProfile && gameState === 'profile_select') {
             const lastProfileId = localStorage.getItem('math_app_last_profile_id');
@@ -95,16 +137,20 @@ const MathApp = () => {
                 if (foundProfile) {
                     console.log("Auto restoring profile:", foundProfile.name);
                     
-                    // ✅ FIX: Dùng setTimeout để đẩy việc update state ra khỏi luồng render hiện tại
-                    // Điều này giúp tránh lỗi "set-state-in-effect" của ESLint
+                    // ✅ Dùng setTimeout để đẩy việc update state ra khỏi luồng render hiện tại
                     setTimeout(() => {
                         setCurrentProfile(foundProfile);
                         setGameState('home');
+                        setHasRestoredProfile(true);
                     }, 0);
+                    return;
                 }
             }
+
+            // Không tìm thấy profile để restore → đánh dấu đã xử lý để không lặp lại
+            setHasRestoredProfile(true);
         }
-    }, [isLoadingData, profiles, currentProfile, gameState]);
+    }, [isLoadingData, profiles, currentProfile, gameState, hasRestoredProfile]);
 
     // --- EFFECT: Background Preloading ---
     const { generateQuizQuestions, setPreloadedQuiz } = gameRunner;
@@ -165,42 +211,61 @@ const MathApp = () => {
 
     const finishGame = async () => {
         const newScore = gameRunner.sessionScore;
-        const newBalance = piggyBank + newScore;
-        setPiggyBank(newBalance);
         setGameState('result');
 
-        if (appUser && !appUser.isAnon) {
-            try {
-                let newStats = { ...userStats };
-                if (!newStats[currentProfile.id]) newStats[currentProfile.id] = { total_questions: 0, total_correct: 0, topics: {} };
-                let pStats = newStats[currentProfile.id];
-                
-                gameRunner.history.forEach(q => {
-                    pStats.total_questions = (pStats.total_questions || 0) + 1;
-                    if (q.isCorrect) pStats.total_correct = (pStats.total_correct || 0) + 1;
-                    if (!pStats.topics) pStats.topics = {};
-                    const topicId = TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || q.topic || 'arithmetic';
-                    if (!pStats.topics[topicId]) pStats.topics[topicId] = { total: 0, correct: 0 };
-                    pStats.topics[topicId].total += 1;
-                    if (q.isCorrect) pStats.topics[topicId].correct += 1;
-                });
-                
-                setUserStats(newStats);
-                const logEntry = {
-                    id: crypto.randomUUID(), profileId: currentProfile.id, timestamp: Date.now(), score: newScore,
-                    difficultyMode: config.difficultyMode, semester: config.semester,
-                    questions: gameRunner.history 
-                };
-                
-                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
-                const snap = await getDoc(userDocRef);
-                const currentLogs = snap.exists() ? (snap.data().logs || []) : [];
-                await updateDoc(userDocRef, { 
-                    piggyBank: newBalance, stats: newStats, 
-                    logs: [...currentLogs, logEntry] 
-                });
-            } catch (e) { console.error("Lỗi lưu kết quả:", e); }
+        // Nếu là khách (ẩn danh), chỉ cập nhật UI local
+        if (!appUser || appUser.isAnon) {
+            setPiggyBank(prev => prev + newScore);
+            return;
         }
+
+        try {
+            // Cập nhật piggyBank an toàn qua Cloud Function
+            try {
+                const res = await secureUpdatePiggyBank(newScore, 'quiz_reward');
+                if (res?.success && typeof res.after === 'number') {
+                    setPiggyBank(res.after);
+                } else {
+                    setPiggyBank(prev => prev + newScore);
+                }
+            } catch (err) {
+                console.error("Lỗi cập nhật piggyBank qua Cloud Function:", err);
+                // Fallback: cập nhật local state nếu Cloud Function không khả dụng
+                // Lưu ý: Điểm này sẽ không được lưu vào Firestore, nhưng app vẫn hoạt động
+                setPiggyBank(prev => prev + newScore);
+                // Không hiển thị lỗi cho user vì đây là lỗi backend, không ảnh hưởng trải nghiệm
+            }
+
+            // Cập nhật stats & logs (không đụng vào piggyBank nữa)
+            let newStats = { ...userStats };
+            if (!newStats[currentProfile.id]) newStats[currentProfile.id] = { total_questions: 0, total_correct: 0, topics: {} };
+            let pStats = newStats[currentProfile.id];
+            
+            gameRunner.history.forEach(q => {
+                pStats.total_questions = (pStats.total_questions || 0) + 1;
+                if (q.isCorrect) pStats.total_correct = (pStats.total_correct || 0) + 1;
+                if (!pStats.topics) pStats.topics = {};
+                const topicId = TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || q.topic || 'arithmetic';
+                if (!pStats.topics[topicId]) pStats.topics[topicId] = { total: 0, correct: 0 };
+                pStats.topics[topicId].total += 1;
+                if (q.isCorrect) pStats.topics[topicId].correct += 1;
+            });
+            
+            setUserStats(newStats);
+            const logEntry = {
+                id: crypto.randomUUID(), profileId: currentProfile.id, timestamp: Date.now(), score: newScore,
+                difficultyMode: config.difficultyMode, semester: config.semester,
+                questions: gameRunner.history 
+            };
+            
+            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
+            const snap = await getDoc(userDocRef);
+            const currentLogs = snap.exists() ? (snap.data().logs || []) : [];
+            await updateDoc(userDocRef, { 
+                stats: newStats, 
+                logs: [...currentLogs, logEntry] 
+            });
+        } catch (e) { console.error("Lỗi lưu kết quả:", e); }
     };
 
     const createProfileWrapper = async () => {
@@ -262,7 +327,7 @@ const MathApp = () => {
                     isLoading={isLoadingData} // <--- TRUYỀN PROP NÀY VÀO
                 />;
             case 'home': 
-                return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={gameRunner.isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} />;
+                return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={gameRunner.isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} onOpenConfig={() => requestParentGate('config', () => setGameState('config'))} />;
             case 'playing': 
                 return <React.Suspense fallback={<Loader/>}><QV quizData={gameRunner.quizData} currentQIndex={gameRunner.currentQIndex} setGameState={setGameState} sessionScore={gameRunner.sessionScore} selectedOption={gameRunner.selectedOption} isSubmitted={gameRunner.isSubmitted} handleSelectOption={gameRunner.handleSelectOption} handleNextQuestion={handleNextQuestionWrapper} /></React.Suspense>;
             case 'result': 
@@ -270,9 +335,9 @@ const MathApp = () => {
             case 'config': 
                 return <ConfigScreen config={config} saveConfig={saveConfigWrapper} setGameState={setGameState} />;
             case 'user_profile': 
-                return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleLogout} profiles={profiles} onSaveProfiles={(p) => { setProfiles(p); saveData({ profiles: p }); }} />;
+                return <UserProfileScreen appUser={appUser} setAppUser={setAppUser} setGameState={setGameState} onLogout={handleLogout} profiles={profiles} onSaveProfiles={(p) => { setProfiles(p); saveData({ profiles: p }); }} deviceSessions={deviceSessions} onRemoteLogoutDevice={remoteLogoutDevice} parentSettings={parentSettings} onUpdateParentSettings={updateParentSettings} />;
             case 'shop': 
-                return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={handleRedeemCash} redemptionHistory={redemptionHistory} />;
+                return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={handleRedeemCash} redemptionRequests={redeemRequests} onApproveRequest={approveRedemption} onRejectRequest={rejectRedemption} ensureParentAccess={requestParentGate} parentAccessValid={parentAccessValid} />;
             case 'report': 
                 return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} setConfig={saveConfigWrapper} />;
             default: 
@@ -301,6 +366,18 @@ const MathApp = () => {
                         {notification.message}
                     </div>
                 )}
+
+                <React.Suspense fallback={null}>
+                    {parentGateRequest && (
+                        <ParentGateModal
+                            isOpen={Boolean(parentGateRequest)}
+                            onClose={() => setParentGateRequest(null)}
+                            onSuccess={handleParentGateSuccess}
+                            parentSettings={parentSettings}
+                            reasonLabel={parentGateRequest?.reason === 'config' ? 'Cấu hình học tập' : 'Cửa hàng phụ huynh'}
+                        />
+                    )}
+                </React.Suspense>
             </div>
         </div>
     );

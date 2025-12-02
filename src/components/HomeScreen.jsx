@@ -3,7 +3,7 @@ import { PiggyBank, Sparkles, WifiOff, Play, Loader, BarChart3, ShoppingBag, Set
 import { ClayButton } from '../lib/helpers.jsx';
 import { fmt } from '../lib/utils.js';
 
-const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, handleStartQuiz, config, setCurrentProfile, appError, setAppError }) => (
+const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, handleStartQuiz, config, setCurrentProfile, appError, setAppError, onOpenConfig }) => (
     <div className="flex flex-col h-full bg-slate-50 p-6">
         {/* Header Profile Info */}
         <div className="flex justify-between items-center mb-6 pt-4">
@@ -34,7 +34,7 @@ const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, han
                 <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center"><ShoppingBag size={20}/></div>
                 <span className="text-sm font-black text-slate-600">Cửa Hàng</span>
             </ClayButton>
-            <ClayButton onClick={() => setGameState('config')} className="h-20 flex flex-row items-center px-4 gap-3 bg-white border-slate-100 !rounded-2xl">
+            <ClayButton onClick={onOpenConfig} className="h-20 flex flex-row items-center px-4 gap-3 bg-white border-slate-100 !rounded-2xl">
                 <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Settings size={20}/></div>
                 <span className="text-sm font-black text-slate-600">Cấu Hình</span>
             </ClayButton>

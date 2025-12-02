@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Mail, Key, UserPlus, LogIn, AlertTriangle, Loader, ShieldCheck, UserCheck } from 'lucide-react';
+import { Mail, Key, UserPlus, LogIn, AlertTriangle, Loader, ShieldCheck, UserCheck, Send } from 'lucide-react';
 import { ClayButton } from '../lib/helpers.jsx';
 import { getDeviceId } from '../lib/utils.js';
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
     updateProfile, 
-    signInAnonymously 
+    signInAnonymously,
+    sendPasswordResetEmail,
+    signOut
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 
@@ -16,6 +18,8 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
     const [password, setPassword] = useState('');
     const [displayName, setDisplayName] = useState(''); // Thêm tên hiển thị khi đăng ký
     const [loading, setLoading] = useState(false);
+    const [resetLoading, setResetLoading] = useState(false);
+    const [resetInfo, setResetInfo] = useState(null);
 
     const handleAuth = async () => {
         if (!email || !password) { setErrorMsg("Vui lòng nhập email và mật khẩu"); return; }
@@ -49,14 +53,46 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 isAnon: false
             };
             
-            await onLoginSuccess(appUser);
+            try {
+                await onLoginSuccess(appUser);
+            } catch (postLoginError) {
+                // Lỗi xảy ra sau khi đăng nhập thành công (thường là lỗi Firestore permissions)
+                console.error("Lỗi sau khi đăng nhập:", postLoginError);
+                let msg = "Đăng nhập thành công nhưng không thể tải dữ liệu. ";
+                if (postLoginError.code === 'permission-denied' || postLoginError.message?.includes('permission')) {
+                    msg += "Vui lòng kiểm tra quyền truy cập Firestore.";
+                } else {
+                    msg += postLoginError.message || "Vui lòng thử lại.";
+                }
+                setErrorMsg(msg);
+                // Sign out để tránh trạng thái không nhất quán
+                if (auth) {
+                    await signOut(auth);
+                }
+                return;
+            }
 
         } catch (e) {
             console.error(e);
-            let msg = "Lỗi kết nối: " + e.message;
-            if (e.code === 'auth/email-already-in-use') msg = "Email này đã được đăng ký!";
-            if (e.code === 'auth/invalid-email') msg = "Email không hợp lệ!";
-            if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') msg = "Sai email hoặc mật khẩu!";
+            let msg = "";
+            // Xử lý các lỗi Firebase Auth cụ thể
+            if (e.code === 'auth/email-already-in-use') {
+                msg = "Email này đã được đăng ký!";
+            } else if (e.code === 'auth/invalid-email') {
+                msg = "Email không hợp lệ!";
+            } else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+                msg = "Sai email hoặc mật khẩu!";
+            } else if (e.code === 'auth/weak-password') {
+                msg = "Mật khẩu quá yếu. Vui lòng chọn mật khẩu mạnh hơn!";
+            } else if (e.code === 'auth/network-request-failed') {
+                msg = "Lỗi kết nối mạng. Vui lòng kiểm tra internet!";
+            } else if (e.code) {
+                // Các lỗi Firebase Auth khác
+                msg = `Lỗi đăng nhập: ${e.code}`;
+            } else {
+                // Lỗi không xác định
+                msg = "Lỗi kết nối: " + (e.message || "Vui lòng thử lại.");
+            }
             setErrorMsg(msg);
         } finally {
             setLoading(false);
@@ -76,11 +112,48 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 createdAt: Date.now(),
                 isAnon: true
             };
-            await onLoginSuccess(anonUser);
+            try {
+                await onLoginSuccess(anonUser);
+            } catch (postLoginError) {
+                console.error("Lỗi sau khi đăng nhập ẩn danh:", postLoginError);
+                setErrorMsg("Đăng nhập ẩn danh thành công nhưng không thể khởi tạo. Vui lòng thử lại.");
+                if (auth) {
+                    await signOut(auth);
+                }
+                return;
+            }
         } catch(e) {
-            setErrorMsg("Lỗi đăng nhập ẩn danh: " + e.message);
+            console.error("Lỗi đăng nhập ẩn danh:", e);
+            let msg = "Lỗi đăng nhập ẩn danh: ";
+            if (e.code === 'auth/network-request-failed') {
+                msg += "Lỗi kết nối mạng. Vui lòng kiểm tra internet!";
+            } else {
+                msg += e.message || "Vui lòng thử lại.";
+            }
+            setErrorMsg(msg);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleResetPassword = async () => {
+        if (!email) {
+            setErrorMsg("Vui lòng nhập email để khôi phục mật khẩu");
+            return;
+        }
+        setResetInfo(null);
+        setErrorMsg(null);
+        setResetLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setResetInfo("Đã gửi email đặt lại mật khẩu. Vui lòng kiểm tra hộp thư!");
+        } catch (error) {
+            console.error(error);
+            let msg = "Không thể gửi email. Vui lòng thử lại.";
+            if (error.code === 'auth/user-not-found') msg = "Email này chưa đăng ký.";
+            setErrorMsg(msg);
+        } finally {
+            setResetLoading(false);
         }
     };
 
@@ -90,6 +163,12 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                 <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-4xl shadow-inner">🔐</div>
                 <h1 className="text-3xl font-black text-slate-800 mb-2">{isRegister ? 'Tạo Tài Khoản' : 'Đăng Nhập'}</h1>
                 <p className="text-slate-400 font-medium mb-8 text-sm">Phụ huynh đăng nhập để đồng bộ kết quả học tập cho bé.</p>
+
+                {resetInfo && (
+                    <div className="mb-4 bg-green-50 text-green-600 p-3 rounded-xl border border-green-100 flex items-center gap-2 text-xs font-bold animate-fade-in">
+                        <Send size={16}/> {resetInfo}
+                    </div>
+                )}
 
                 {errorMsg && (
                     <div className="mb-4 bg-red-50 text-red-600 p-3 rounded-xl border border-red-100 flex items-center gap-2 text-xs font-bold animate-shake">
@@ -119,9 +198,18 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                     {isRegister ? 'Đăng Ký Ngay' : 'Đăng Nhập'}
                 </ClayButton>
 
-                <button onClick={() => { setIsRegister(!isRegister); setErrorMsg(null); }} className="text-sm font-bold text-indigo-500 hover:underline mb-4">
+                <button onClick={() => { setIsRegister(!isRegister); setErrorMsg(null); setResetInfo(null); }} className="text-sm font-bold text-indigo-500 hover:underline mb-1">
                     {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký mới'}
                 </button>
+                {!isRegister && (
+                    <button
+                        onClick={handleResetPassword}
+                        disabled={resetLoading}
+                        className="text-xs font-bold text-slate-400 hover:text-indigo-500 mb-4"
+                    >
+                        {resetLoading ? 'Đang gửi...' : 'Quên mật khẩu? Nhận email khôi phục'}
+                    </button>
+                )}
 
                 <div className="text-xs text-slate-400 font-medium mb-3">HOẶC</div>
                 <ClayButton onClick={handleAnonLogin} disabled={loading} colorClass="bg-slate-200 text-slate-700" className="w-full h-12 flex items-center justify-center gap-2 font-bold text-sm">

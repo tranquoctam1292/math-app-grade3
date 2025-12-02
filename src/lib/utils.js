@@ -111,7 +111,7 @@ export const solveEquation = (text) => {
         }
         
         return null;
-    } catch (e) {
+    } catch {
         return null;
     }
 };
@@ -159,4 +159,34 @@ export const getWeakTopics = (stats) => {
             return rate < 0.5 && val.total >= 3;
         })
         .map(([key]) => TOPIC_TRANSLATIONS[key] || key); 
+};
+
+export const getDeviceLabel = () => {
+    try {
+        const ua = navigator?.userAgent || 'Thiết bị';
+        const platform = navigator?.platform || '';
+        const browserMatch = ua.match(/(Chrome|Firefox|Safari|Edge)\/[\d.]+/i);
+        const browser = browserMatch ? browserMatch[1] : 'Trình duyệt';
+        if (platform) return `${platform} • ${browser}`;
+        return `${browser} • Web`;
+    } catch {
+        return 'Thiết bị chưa xác định';
+    }
+};
+
+const digestToHex = (buffer) => Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+
+export const hashParentPin = async (pin) => {
+    if (!pin) return null;
+    const encoder = new TextEncoder();
+    const data = encoder.encode(String(pin).trim());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return digestToHex(hashBuffer);
+};
+
+export const verifyParentPin = async (pin, pinHash) => {
+    if (!pinHash) return false;
+    const hashed = await hashParentPin(pin);
+    return hashed === pinHash;
 };

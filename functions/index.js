@@ -1,39 +1,21 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const admin = require("firebase-admin");
+const { getFirestore } = require("firebase-admin/firestore");
+
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
+
+const db = getFirestore();
+const APP_ID = process.env.FIREBASE_APP_ID;
 
 // Định nghĩa Secret mới cho Gemini
 const apiKey = defineSecret("GEMINI_API_KEY");
 
-exports.generateQuestions = onCall({ 
-    secrets: [apiKey],
-    timeoutSeconds: 60,
-    memory: "512MiB",
-    region: "us-central1"
-}, async (request) => {
-    try {
-        const prompt = request.data.prompt;
-        if (!prompt) {
-            throw new HttpsError('invalid-argument', 'Client không gửi prompt.');
-        }
-
-        const GEMINI_API_KEY = apiKey.value();
-        if (!GEMINI_API_KEY) {
-            throw new HttpsError('failed-precondition', 'Chưa cấu hình GEMINI_API_KEY.');
-        }
-
-        // Khởi tạo Gemini
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        
-        // ✅ FIX: Đổi tên model thành phiên bản cụ thể 'gemini-1.5-flash-001'
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.0-flash", // Thay đổi tại đây
-            generationConfig: {
-                responseMimeType: "application/json"
-            }
-        });
-
-        const jsonInstruction = `
+const callGeminiForQuestions = async (model, prompt, attempt) => {
+    const jsonInstruction = `
         Bạn là chuyên gia giáo dục Toán tiểu học.
         Nhiệm vụ: Tạo danh sách câu hỏi toán học dựa trên yêu cầu dưới đây.
         YÊU CẦU QUAN TRỌNG VỀ NỘI DUNG:
@@ -102,29 +84,68 @@ exports.generateQuestions = onCall({
         }
         `;
 
-        const fullPrompt = jsonInstruction + "\n\n" + "NỘI DUNG YÊU CẦU CỤ THỂ:\n" + prompt;
+    const safetySuffix = attempt > 0
+        ? '\n\nCHỈ TRẢ VỀ JSON THUẦN. KHÔNG DÙNG ``` HOẶC GIẢI THÍCH. Nếu trước đó bạn trả về sai định dạng, hãy sửa lại đúng JSON.'
+        : '';
 
-        // Gọi Gemini
-        const result = await model.generateContent(fullPrompt);
-        const response = await result.response;
-        const text = response.text();
+    const fullPrompt = jsonInstruction + "\n\n" + "NỘI DUNG YÊU CẦU CỤ THỂ:\n" + prompt + safetySuffix;
 
-        if (!text) throw new HttpsError('internal', "Gemini trả về rỗng.");
+    // Gọi Gemini
+    const result = await model.generateContent(fullPrompt);
+    const response = await result.response;
 
-        // Parse JSON
-        let jsonStr = text.trim();
-        if (jsonStr.startsWith("```")) {
-            jsonStr = jsonStr.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "");
+    // Với responseMimeType=application/json, dùng .text() vẫn nhận chuỗi JSON
+    const text = response.text();
+    if (!text) throw new HttpsError('internal', "Gemini trả về rỗng.");
+
+    let jsonStr = text.trim();
+    if (jsonStr.startsWith("```")) {
+        jsonStr = jsonStr.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "");
+    }
+
+    try {
+        const parsed = JSON.parse(jsonStr);
+        if (Array.isArray(parsed)) return parsed;
+        if (parsed.questions && Array.isArray(parsed.questions)) return parsed.questions;
+        return [parsed];
+    } catch (parseErr) {
+        console.error(`Lỗi Parse JSON từ Gemini (attempt=${attempt}):`, parseErr, "Raw Text:", text);
+        throw new HttpsError('internal', "Lỗi định dạng dữ liệu từ AI.");
+    }
+};
+
+exports.generateQuestions = onCall({ 
+    secrets: [apiKey],
+    timeoutSeconds: 60,
+    memory: "512MiB",
+    region: "us-central1"
+}, async (request) => {
+    try {
+        const prompt = request.data.prompt;
+        if (!prompt) {
+            throw new HttpsError('invalid-argument', 'Client không gửi prompt.');
         }
 
+        const GEMINI_API_KEY = apiKey.value();
+        if (!GEMINI_API_KEY) {
+            throw new HttpsError('failed-precondition', 'Chưa cấu hình GEMINI_API_KEY.');
+        }
+
+        // Khởi tạo Gemini với yêu cầu JSON thuần
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-2.0-flash",
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
+        });
+
+        // Thử gọi 1 lần; nếu parse lỗi, retry thêm 1 lần với prompt siết chặt hơn
         try {
-            const parsed = JSON.parse(jsonStr);
-            if (Array.isArray(parsed)) return parsed;
-            if (parsed.questions && Array.isArray(parsed.questions)) return parsed.questions;
-            return [parsed]; 
-        } catch (parseErr) {
-            console.error("Lỗi Parse JSON từ Gemini:", parseErr, "Raw Text:", text);
-            throw new HttpsError('internal', "Lỗi định dạng dữ liệu từ AI.");
+            return await callGeminiForQuestions(model, prompt, 0);
+        } catch (firstError) {
+            console.warn("Gemini JSON parse failed, retrying once...", firstError);
+            return await callGeminiForQuestions(model, prompt, 1);
         }
 
     } catch (error) {
@@ -132,3 +153,96 @@ exports.generateQuestions = onCall({
         throw new HttpsError('internal', error.message);
     }
 });
+
+// --- Cloud Function an toàn để cập nhật piggyBank ---
+exports.updatePiggyBank = onCall(
+    {
+        timeoutSeconds: 15,
+        memory: "256MiB",
+        region: "us-central1",
+    },
+    async (request) => {
+        const auth = request.auth;
+        if (!auth || !auth.uid) {
+            throw new HttpsError("unauthenticated", "Vui lòng đăng nhập trước khi cập nhật điểm.");
+        }
+
+        const { delta, reason, appId: clientAppId } = request.data || {};
+
+        if (typeof delta !== "number" || !Number.isFinite(delta) || delta === 0) {
+            throw new HttpsError(
+                "invalid-argument",
+                "Giá trị delta không hợp lệ. Phải là số khác 0."
+            );
+        }
+
+        if (Math.abs(delta) > 100000) {
+            throw new HttpsError(
+                "failed-precondition",
+                "Delta quá lớn, thao tác bị chặn để tránh gian lận."
+            );
+        }
+
+        const appId = APP_ID || clientAppId;
+        if (!appId) {
+            throw new HttpsError(
+                "failed-precondition",
+                "Thiếu APP_ID trên server. Vui lòng cấu hình FIREBASE_APP_ID hoặc gửi appId hợp lệ."
+            );
+        }
+
+        const userId = auth.uid;
+        const userRef = db.doc(`artifacts/${appId}/public/data/math_user_data/${userId}`);
+
+        try {
+            const result = await db.runTransaction(async (tx) => {
+                const snap = await tx.get(userRef);
+                if (!snap.exists) {
+                    throw new HttpsError(
+                        "not-found",
+                        "Không tìm thấy hồ sơ học tập của bé."
+                    );
+                }
+
+                const data = snap.data();
+                const current = typeof data.piggyBank === "number" ? data.piggyBank : 0;
+                const next = current + delta;
+
+                if (next < 0) {
+                    throw new HttpsError(
+                        "failed-precondition",
+                        "Số dư không đủ để thực hiện giao dịch."
+                    );
+                }
+
+                const logs = Array.isArray(data.logs) ? data.logs : [];
+                const serverLog = {
+                    type: "piggyBank_update",
+                    delta,
+                    before: current,
+                    after: next,
+                    reason: reason || "system",
+                    ts: Date.now(),
+                };
+
+                tx.update(userRef, {
+                    piggyBank: next,
+                    logs: [...logs, serverLog],
+                });
+
+                return { before: current, after: next };
+            });
+
+            return { success: true, ...result };
+        } catch (error) {
+            if (error instanceof HttpsError) {
+                throw error;
+            }
+            console.error("Lỗi updatePiggyBank:", error);
+            throw new HttpsError(
+                "internal",
+                "Không thể cập nhật điểm tiết kiệm. Vui lòng thử lại sau."
+            );
+        }
+    }
+);

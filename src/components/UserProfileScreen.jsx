@@ -2,15 +2,27 @@ import React, { useState } from 'react';
 import { 
     UserCog, XCircle, CheckCircle, AlertTriangle, User, Mail, Save, Key, 
     RefreshCw, Loader, LogOut, MessageSquarePlus, ShieldCheck, Smartphone,
-    Users, Edit3, Trash2, PlusCircle
+    Users, Edit3, Trash2, PlusCircle, Shield, Power
 } from 'lucide-react'; 
 import { updateProfile, updatePassword } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { ClayButton } from '../lib/helpers';
 import FeedbackModal from './FeedbackModal';
 import { AVATARS } from '../lib/constants'; 
+import { getDeviceId } from '../lib/utils';
 
-const UserProfileScreen = ({ appUser, setAppUser, setGameState, onLogout, profiles, onSaveProfiles }) => {
+const UserProfileScreen = ({
+    appUser,
+    setAppUser,
+    setGameState,
+    onLogout,
+    profiles,
+    onSaveProfiles,
+    deviceSessions = [],
+    onRemoteLogoutDevice,
+    parentSettings,
+    onUpdateParentSettings
+}) => {
     // --- STATE QUẢN LÝ TÀI KHOẢN ---
     const [displayName, setDisplayName] = useState(appUser.displayName || '');
     const [newPassword, setNewPassword] = useState('');
@@ -19,11 +31,15 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState, onLogout, profil
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
     const [showFeedback, setShowFeedback] = useState(false);
+    const [pinValue, setPinValue] = useState('');
+    const [pinConfirm, setPinConfirm] = useState('');
+    const [pinLoading, setPinLoading] = useState(false);
 
     // --- STATE QUẢN LÝ SỬA PROFILE ---
     const [editingProfile, setEditingProfile] = useState(null); 
     const [editName, setEditName] = useState('');
     const [editAvatar, setEditAvatar] = useState('');
+    const [localDeviceId] = useState(() => getDeviceId());
 
     // --- HÀM CẬP NHẬT TÊN HIỂN THỊ (PHỤ HUYNH) ---
     const handleUpdateProfile = async () => {
@@ -44,6 +60,38 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState, onLogout, profil
             setError("Lỗi cập nhật: " + e.message);
         }
         setLoading(false);
+    };
+
+    const handleSavePin = async () => {
+        if (pinValue.length < 4) { setError("Mã PIN phải có ít nhất 4 số."); return; }
+        if (pinValue !== pinConfirm) { setError("PIN xác nhận chưa khớp."); return; }
+        setPinLoading(true); setMessage(null); setError(null);
+        const result = await onUpdateParentSettings({ pin: pinValue });
+        setPinLoading(false);
+        if (result.success) {
+            setMessage("Đã lưu mã PIN phụ huynh!");
+            setPinValue(''); setPinConfirm('');
+        } else {
+            setError(result.message || "Không thể lưu mã PIN.");
+        }
+    };
+
+    const handleClearPin = async () => {
+        if (!parentSettings?.pinHash) return;
+        setPinLoading(true); setMessage(null); setError(null);
+        const result = await onUpdateParentSettings({ pin: '' });
+        setPinLoading(false);
+        if (result.success) setMessage("Đã xoá mã PIN. Vui lòng đặt mã mới để bảo vệ bé.");
+        else setError(result.message || "Không thể xoá mã PIN.");
+    };
+
+    const handleRemoteLogout = async (deviceId) => {
+        if (!window.confirm("Đăng xuất thiết bị này khỏi tài khoản?")) return;
+        setLoading(true); setMessage(null); setError(null);
+        const result = await onRemoteLogoutDevice(deviceId);
+        setLoading(false);
+        if (result.success) setMessage(result.message);
+        else setError(result.message);
     };
 
     // --- HÀM ĐỔI MẬT KHẨU ---
@@ -167,7 +215,39 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState, onLogout, profil
                     </div>
                 </div>
 
-                {/* --- MỤC 3: ĐỔI MẬT KHẨU --- */}
+                {/* --- MỤC 3: MÃ PIN PHỤ HUYNH --- */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                    <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 flex items-center gap-2"><Shield size={14}/> Hàng rào phụ huynh</h3>
+                    <div className="space-y-3">
+                        <input
+                            type="password"
+                            value={pinValue}
+                            onChange={e => setPinValue(e.target.value.replace(/\D/g, ''))}
+                            placeholder="Nhập mã PIN 4 số"
+                            maxLength={6}
+                            className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold text-slate-700 transition-all"
+                        />
+                        <input
+                            type="password"
+                            value={pinConfirm}
+                            onChange={e => setPinConfirm(e.target.value.replace(/\D/g, ''))}
+                            placeholder="Nhập lại mã PIN"
+                            maxLength={6}
+                            className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none font-bold text-slate-700 transition-all"
+                        />
+                        <div className="flex gap-2">
+                            <ClayButton onClick={handleSavePin} disabled={pinLoading || !pinValue} colorClass="bg-indigo-600 text-white" className="flex-1 h-12 font-bold !rounded-xl">
+                                {pinLoading ? <Loader size={18} className="animate-spin"/> : 'Lưu Mã PIN'}
+                            </ClayButton>
+                            <ClayButton onClick={handleClearPin} disabled={!parentSettings?.pinHash || pinLoading} colorClass="bg-slate-100 text-slate-500" className="w-28 h-12 font-bold !rounded-xl">
+                                Xoá PIN
+                            </ClayButton>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-bold">Mã PIN sẽ được yêu cầu khi mở Cấu hình và chế độ Admin của Cửa hàng.</p>
+                    </div>
+                </div>
+
+                {/* --- MỤC 4: ĐỔI MẬT KHẨU --- */}
                 {!appUser.isAnon && (
                     <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
                         <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 flex items-center gap-2"><Key size={14}/> Bảo mật</h3>
@@ -181,7 +261,34 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState, onLogout, profil
                     </div>
                 )}
 
-                {/* --- MỤC 4: CÔNG CỤ KHÁC --- */}
+                {/* --- MỤC 5: THIẾT BỊ ĐĂNG NHẬP --- */}
+                {!appUser.isAnon && (
+                    <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                        <h3 className="font-bold text-slate-400 text-xs uppercase mb-4 flex items-center gap-2"><Smartphone size={14}/> Thiết bị đã đăng nhập ({deviceSessions.length}/3)</h3>
+                        <div className="space-y-3">
+                            {deviceSessions.length === 0 && (
+                                <div className="text-center text-slate-400 text-sm italic py-2">Chưa ghi nhận thiết bị nào.</div>
+                            )}
+                            {deviceSessions.map(device => (
+                                <div key={device.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-200">
+                                    <div>
+                                        <div className="font-black text-slate-700 text-sm">{device.name || 'Thiết bị lạ'}</div>
+                                        <div className="text-[10px] text-slate-400">Hoạt động: {device.lastActive ? new Date(device.lastActive).toLocaleString('vi-VN') : 'Không rõ'}</div>
+                                    </div>
+                                    {device.id === localDeviceId ? (
+                                        <span className="text-[10px] font-black text-green-500 px-2 py-1 bg-green-100 rounded-full">Thiết bị này</span>
+                                    ) : (
+                                        <ClayButton onClick={() => handleRemoteLogout(device.id)} colorClass="bg-red-100 text-red-600" className="h-9 px-3 text-xs font-black !rounded-xl">
+                                            <Power size={14}/> Đăng xuất
+                                        </ClayButton>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* --- MỤC 6: CÔNG CỤ KHÁC --- */}
                 <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-3">
                     <h3 className="font-bold text-slate-400 text-xs uppercase mb-2 flex items-center gap-2"><ShieldCheck size={14}/> Trung tâm hỗ trợ</h3>
                     
@@ -199,7 +306,7 @@ const UserProfileScreen = ({ appUser, setAppUser, setGameState, onLogout, profil
                 {/* Footer Info */}
                 <div className="text-center pb-4">
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-slate-200 text-slate-500 text-[10px] font-bold">
-                        <Smartphone size={10}/> Thiết bị đang dùng: {appUser.devices ? appUser.devices.length : 1}/3
+                        <Smartphone size={10}/> Thiết bị đang dùng: {deviceSessions.length}/3
                     </span>
                 </div>
             </div>

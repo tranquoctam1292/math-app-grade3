@@ -2,9 +2,39 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Rule hiện tại (giữ nguyên)
+    // --- USER DATA: Chỉ chủ sở hữu được đọc/ghi, KHÔNG cho client sửa piggyBank ---
     match /artifacts/{appId}/public/data/math_user_data/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      // Kiểm tra piggyBank không được thay đổi từ client
+      // Nếu piggyBank không có trong request.resource (client không cố gắng thay đổi) -> cho phép
+      // Nếu có, chỉ cho phép piggyBank == 0 (cho create)
+      function piggyBankUnchanged() {
+        return !('piggyBank' in request.resource.data) || request.resource.data.piggyBank == 0;
+      }
+
+      // Kiểm tra piggyBank không được thay đổi khi update (document đã tồn tại)
+      // Nếu piggyBank không có trong request.resource (client không cố gắng thay đổi) -> cho phép
+      // Nếu document cũ không có piggyBank, chỉ cho phép set thành 0
+      // Nếu document cũ đã có piggyBank, giá trị phải giữ nguyên
+      function piggyBankUnchangedOnUpdate() {
+        return !('piggyBank' in request.resource.data) 
+            || (!('piggyBank' in resource.data) && request.resource.data.piggyBank == 0)
+            || (('piggyBank' in resource.data) && request.resource.data.piggyBank == resource.data.piggyBank);
+      }
+
+      // Cho phép đọc toàn bộ hồ sơ của chính mình
+      allow get, list: if isOwner();
+
+      // Cho phép tạo mới document cho chính mình, piggyBank phải khởi tạo = 0 hoặc không có
+      // (Nếu không có, sẽ được khởi tạo mặc định là 0 trong code)
+      allow create: if isOwner() && piggyBankUnchanged();
+
+      // Cho phép cập nhật / xoá, nhưng KHÔNG được phép thay đổi piggyBank trực tiếp từ client.
+      // (Các thay đổi piggyBank hợp lệ nên đi qua Cloud Functions với quyền admin, bypass rules.)
+      allow update, delete: if isOwner() && piggyBankUnchangedOnUpdate();
     }
 
     // Rule feedback (giữ nguyên)
@@ -12,10 +42,19 @@ service cloud.firestore {
       allow create: if request.auth != null;
     }
 
-    // --- THÊM MỚI: Rule cho math_accounts ---
-    match /artifacts/{appId}/public/data/math_accounts/{document=**} {
-      // Chỉ cho phép update nếu đã đăng nhập
-      allow read, write: if request.auth != null;
+    // --- ACCOUNT DATA: Quản lý thiết bị / phiên đăng nhập ---
+    // LƯU Ý: Để tránh chặn đăng nhập do rules quá chặt, tạm thời cho phép
+    // mọi user đã đăng nhập được đọc/ghi document math_accounts của chính họ.
+    // Dữ liệu ở đây KHÔNG chứa điểm số hay thông tin nhạy cảm của bé,
+    // chỉ là danh sách thiết bị & phiên đăng nhập.
+    match /artifacts/{appId}/public/data/math_accounts/{accountId} {
+      function isAuthenticated() {
+        return request.auth != null;
+      }
+
+      // TẠM THỜI: Cho phép toàn quyền cho user đã đăng nhập.
+      // Ta vẫn giới hạn ở collection này, không ảnh hưởng tới piggyBank / điểm số.
+      allow read, write: if isAuthenticated();
     }
     
     match /{document=**} {

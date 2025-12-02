@@ -14,7 +14,7 @@ const ReportScreen = ({ currentProfile, appUser, setGameState, setConfig }) => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedLog, setSelectedLog] = useState(null);
-    const [weeklyData, setWeeklyData] = useState([]);
+    const [historyFilter, setHistoryFilter] = useState('week');
 
     // Helper: Lấy ngày định dạng YYYY-MM-DD theo giờ địa phương
     const getLocalYMD = (date) => {
@@ -38,38 +38,58 @@ const ReportScreen = ({ currentProfile, appUser, setGameState, setConfig }) => {
                 if (userData.logs && Array.isArray(userData.logs)) {
                     // Lấy logs của profile hiện tại
                     const profileLogs = userData.logs.filter(l => l.profileId === currentProfile.id);
-                    // Sắp xếp mới nhất trước
                     profileLogs.sort((a, b) => b.timestamp - a.timestamp);
-                    setLogs(profileLogs.slice(0, 20));
-                    
-                    // --- XỬ LÝ DỮ LIỆU BIỂU ĐỒ ---
-                    const last7Days = [...Array(7)].map((_, i) => {
-                        const d = new Date();
-                        d.setDate(d.getDate() - (6 - i)); // 6 ngày trước -> hôm nay
-                        return d;
-                    });
-
-                    const chartData = last7Days.map(dateObj => {
-                        const dateStr = getLocalYMD(dateObj);
-                        
-                        const dayLogs = profileLogs.filter(l => {
-                            const lDate = getLocalYMD(new Date(l.timestamp));
-                            return lDate === dateStr;
-                        });
-                        
-                        const dayScore = dayLogs.reduce((acc, curr) => acc + (curr.score || 0), 0);
-                        const dayLabel = `${dateObj.getDate()}/${dateObj.getMonth() + 1}`;
-                        // Mảng thứ trong tuần tiếng Việt
-                        const dayOfWeek = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dateObj.getDay()];
-                        
-                        return { label: dayLabel, dayOfWeek, score: dayScore };
-                    });
-                    setWeeklyData(chartData);
+                    setLogs(profileLogs);
                 }
             } catch (error) { console.error(error); } finally { setLoading(false); }
         };
         fetchData();
     }, [appUser, currentProfile]);
+
+    const buildChartData = () => {
+        const buildWeek = () => {
+            const last7Days = [...Array(7)].map((_, i) => {
+                const d = new Date();
+                d.setDate(d.getDate() - (6 - i));
+                return d;
+            });
+            return last7Days.map(dateObj => {
+                const dateStr = getLocalYMD(dateObj);
+                const dayLogs = logs.filter(l => getLocalYMD(new Date(l.timestamp)) === dateStr);
+                const dayScore = dayLogs.reduce((acc, curr) => acc + (curr.score || 0), 0);
+                const dayOfWeek = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][dateObj.getDay()];
+                return { label: `${dateObj.getDate()}/${dateObj.getMonth() + 1}`, dayOfWeek, score: dayScore };
+            });
+        };
+
+        if (historyFilter === 'week') {
+            return buildWeek();
+        }
+
+        const bucket = {};
+        logs.forEach(log => {
+            const date = new Date(log.timestamp);
+            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            if (!bucket[key]) bucket[key] = 0;
+            bucket[key] += log.score || 0;
+        });
+        const sortedKeys = Object.keys(bucket).sort();
+        const limit = historyFilter === 'month' ? 4 : sortedKeys.length;
+        const keys = sortedKeys.slice(-limit);
+        const monthlyData = keys.map(key => {
+            const [year, month] = key.split('-');
+            return {
+                label: `Th${Number(month)}/${year.slice(-2)}`,
+                dayOfWeek: '',
+                score: bucket[key]
+            };
+        });
+        if (monthlyData.length === 0) return buildWeek();
+        return monthlyData;
+    };
+
+    const chartData = buildChartData();
+    const chartTitle = historyFilter === 'week' ? 'Phong độ 7 ngày qua' : historyFilter === 'month' ? 'So sánh theo tháng' : 'Tất cả lịch sử';
 
     const getTopicVietnamese = (key) => {
         // 1. Tìm trong danh sách chuẩn (nếu key là ID tiếng Anh như 'geometry')
@@ -164,19 +184,31 @@ const ReportScreen = ({ currentProfile, appUser, setGameState, setConfig }) => {
 
             {/* --- WEEKLY CHART (Quan trọng: shrink-0 và min-height) --- */}
             <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6 shrink-0">
-                <h3 className="font-black text-slate-700 mb-6 flex items-center gap-2 text-sm uppercase">
-                    <Calendar size={18} className="text-blue-500"/> Phong độ 7 ngày qua
-                </h3>
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-black text-slate-700 flex items-center gap-2 text-sm uppercase">
+                        <Calendar size={18} className="text-blue-500"/> {chartTitle}
+                    </h3>
+                    <div className="flex gap-2 text-[10px] font-black">
+                        {['week', 'month', 'all'].map(option => (
+                            <button
+                                key={option}
+                                onClick={() => setHistoryFilter(option)}
+                                className={`px-3 py-1 rounded-full border ${historyFilter === option ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-100 text-slate-500 border-slate-200'}`}
+                            >
+                                {option === 'week' ? '7 ngày' : option === 'month' ? 'Tháng' : 'Tất cả'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
                 
                 {/* Chart Container với chiều cao cố định để tránh bị bẹp */}
                 <div className="h-48 flex items-end justify-between gap-2 sm:gap-4 px-1">
-                    {weeklyData.map((day, idx) => {
-                        // Tính max score an toàn (tối thiểu 1000đ để cột không bị quá cao nếu điểm thấp)
-                        const maxScore = Math.max(...weeklyData.map(d => d.score), 2000); 
+                    {chartData.map((day, idx) => {
+                        const maxScore = Math.max(...chartData.map(d => d.score), 2000); 
                         
                         // Chiều cao %
                         const heightPercent = day.score > 0 ? Math.max((day.score / maxScore) * 100, 5) : 2; 
-                        const isToday = idx === 6;
+                        const isToday = historyFilter === 'week' ? idx === 6 : false;
                         
                         return (
                             <div key={idx} className="flex-1 flex flex-col items-center justify-end group h-full">
@@ -195,7 +227,7 @@ const ReportScreen = ({ currentProfile, appUser, setGameState, setConfig }) => {
 
                                 {/* Date Label */}
                                 <div className={`mt-3 text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md' : 'text-slate-400'}`}>
-                                    {day.dayOfWeek}
+                                    {historyFilter === 'week' ? day.dayOfWeek : day.label}
                                 </div>
                             </div>
                         )

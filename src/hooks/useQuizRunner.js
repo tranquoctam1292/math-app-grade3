@@ -7,7 +7,8 @@ import {
     normalizeVal,
     normalizeComparisonSymbol 
 } from '../lib/utils';
-import { TOPICS_LIST, TOPIC_TRANSLATIONS, BACKUP_QUESTIONS, REWARD_PER_LEVEL } from '../lib/constants';
+import { TOPICS_LIST, TOPIC_TRANSLATIONS, REWARD_PER_LEVEL } from '../lib/constants';
+import { buildOfflineQuiz } from '../lib/offlineGenerator';
 import { evaluate } from 'mathjs';
 
 const getRandomConstraints = () => {
@@ -167,25 +168,8 @@ export const useQuizRunner = (currentProfile, config) => {
             console.warn("AI Error, using backup:", e);
             if (isBackground) return null;
 
-            // --- FIX: Lọc câu hỏi backup theo chủ đề đã chọn ---
-            let filteredBackup = BACKUP_QUESTIONS;
-            
-            // Chỉ lọc nếu người dùng có chọn chủ đề cụ thể (không rỗng)
-            if (config.selectedTopics && config.selectedTopics.length > 0) {
-                filteredBackup = BACKUP_QUESTIONS.filter(q => 
-                    // So sánh topic của câu hỏi với danh sách topic người dùng chọn
-                    config.selectedTopics.includes(q.topic)
-                );
-                
-                // Nếu lọc xong mà ít quá (dưới 5 câu) thì lấy thêm các câu khác để đủ bài làm
-                if (filteredBackup.length < 5) {
-                    const others = BACKUP_QUESTIONS.filter(q => !config.selectedTopics.includes(q.topic));
-                    filteredBackup = [...filteredBackup, ...others];
-                }
-            }
-
-            // Trộn và lấy 10 câu
-            return processQuestions([...filteredBackup].sort(() => 0.5 - Math.random()).slice(0, 10));
+            const offline = buildOfflineQuiz(config);
+            return processQuestions(offline);
         }
     }, [currentProfile, config]);
 

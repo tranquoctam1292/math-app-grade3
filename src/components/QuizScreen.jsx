@@ -4,6 +4,7 @@ import { ClayButton, MathText } from '../lib/helpers';
 import { REWARD_PER_LEVEL } from '../lib/constants';
 // ✅ CẬP NHẬT IMPORT: Thêm normalizeVal
 import { fmt, normalizeVal } from '../lib/utils';
+import parse from 'html-react-parser';
 
 // Import các dạng bài tập mới
 import QuizMCQ from './quiz_types/QuizMCQ';
@@ -12,8 +13,72 @@ import QuizComparison from './quiz_types/QuizComparison';
 import QuizSorting from './quiz_types/QuizSorting';
 import QuizMatching from './quiz_types/QuizMatching';
 
+const ALLOWED_SVG_TAGS = new Set(['rect', 'circle', 'path', 'line', 'polygon', 'polyline', 'text']);
+const ALLOWED_ATTRS = new Set([
+    'x', 'y', 'x1', 'y1', 'x2', 'y2',
+    'cx', 'cy', 'r',
+    'width', 'height', 'rx', 'ry',
+    'points', 'd',
+    'stroke', 'stroke-width', 'strokeLinecap', 'strokeLinejoin', 'strokeDasharray',
+    'fill', 'opacity',
+    'font-size', 'fontWeight', 'text-anchor',
+    'transform'
+]);
+
+const renderSafeSvgContent = (svgContent) => {
+    if (!svgContent || typeof svgContent !== 'string') return null;
+
+    return parse(svgContent, {
+        replace: (domNode) => {
+            if (domNode.type === 'text') {
+                return domNode.data;
+            }
+            if (domNode.type !== 'tag') return null;
+
+            const tag = domNode.name.toLowerCase();
+            if (!ALLOWED_SVG_TAGS.has(tag)) return null;
+
+            const safeProps = {};
+            const attribs = domNode.attribs || {};
+
+            Object.keys(attribs).forEach((key) => {
+                const lowerKey = key.toLowerCase();
+                // Loại bỏ mọi on* handler, href, xlink, style inline
+                if (lowerKey.startsWith('on')) return;
+                if (lowerKey === 'href' || lowerKey === 'xlink:href') return;
+                if (lowerKey === 'style') return;
+                if (!ALLOWED_ATTRS.has(lowerKey)) return;
+                safeProps[lowerKey] = attribs[key];
+            });
+
+            return React.createElement(tag, safeProps, domNode.children?.map((child) => (
+                // Gọi lại parser trên children để áp dụng cùng logic
+                renderSafeSvgContent(parse(child.data || '', {})) || null
+            )));
+        }
+    });
+};
+
+const buildGeometrySvg = (question) => {
+    if (question.topic !== 'geometry') return question.svgContent || null;
+    if (question.svgContent && question.svgContent.trim().length > 0) return question.svgContent;
+    const text = String(question.text || '').toLowerCase();
+    const nums = (question.text || '').match(/\d+/g)?.map(Number) || [];
+    if (text.includes('tam giác')) {
+        return `<polygon points="60,150 150,40 240,150" stroke="#4F46E5" stroke-width="4" fill="#E0E7FF" />
+        <line x1="150" y1="40" x2="150" y2="150" stroke="#F97316" stroke-dasharray="6,4" stroke-width="2" />
+        <text x="150" y="30" text-anchor="middle" font-size="14" fill="#374151" font-weight="bold">Tam giác</text>`;
+    }
+    const width = Math.min(220, (nums[0] || 10) * 10);
+    const height = Math.min(120, (nums[1] || nums[0] || 5) * 8);
+    return `<rect x="${(300 - width) / 2}" y="${(200 - height) / 2}" width="${width}" height="${height}" rx="12" stroke="#4F46E5" stroke-width="4" fill="#E0E7FF" />
+        <text x="150" y="${(200 - height) / 2 - 10}" text-anchor="middle" font-size="14" fill="#374151" font-weight="bold">${nums[0] || 10} cm</text>
+        <text x="${(300 + width) / 2 + 10}" y="110" font-size="14" fill="#374151" font-weight="bold" transform="rotate(-90 ${(300 + width) / 2 + 10},110)">${nums[1] || nums[0] || 5} cm</text>`;
+};
+
 const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion }) => {
     const q = quizData[currentQIndex];
+    const geometrySvg = buildGeometrySvg(q);
     const progress = ((currentQIndex + 1) / quizData.length) * 100;
     
     if (!q) return <div className="p-6 text-center">Đang tải...</div>;
@@ -102,7 +167,7 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                             <MathText text={q.text} />
                         </div>
                         {/* SVG Support */}
-                        {q.svgContent && (
+                        {geometrySvg && (
                             <div className="mt-4 flex justify-center animation-fade-in">
                                 <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-inner">
                                     {/* FIX: Bỏ height="auto" */}
@@ -111,9 +176,10 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
                                         viewBox="0 0 300 200" 
                                         xmlns="http://www.w3.org/2000/svg" 
                                         className="max-w-[280px] h-auto mx-auto" 
-                                        dangerouslySetInnerHTML={{ __html: q.svgContent }} 
                                         style={{ minHeight: '120px' }} 
-                                    />
+                                    >
+                                        {renderSafeSvgContent(geometrySvg)}
+                                    </svg>
                                 </div>
                             </div>
                         )}
