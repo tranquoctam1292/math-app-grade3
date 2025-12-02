@@ -3,7 +3,7 @@ import { callGemini } from '../lib/gemini';
 import { solveEquation, solveComparison, solveSimpleExpression, normalizeVal } from '../lib/utils';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, BACKUP_QUESTIONS, REWARD_PER_LEVEL } from '../lib/constants';
 
-// Helper tạo ràng buộc ngẫu nhiên
+// Helper tạo ràng buộc ngẫu nhiên (Giữ nguyên)
 const getRandomConstraints = () => {
     const constraints = [
         "Ưu tiên sử dụng các số lẻ trong phép tính.",
@@ -20,7 +20,7 @@ const getRandomConstraints = () => {
     return constraints.sort(() => 0.5 - Math.random()).slice(0, 2).join(" ");
 };
 
-export const useQuizRunner = (currentProfile, config) => { // Đã bỏ userStats ở tham số nếu không dùng đến
+export const useQuizRunner = (currentProfile, config) => {
     const [quizData, setQuizData] = useState([]);
     const [currentQIndex, setCurrentQIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState(null);
@@ -34,8 +34,6 @@ export const useQuizRunner = (currentProfile, config) => { // Đã bỏ userStat
     // AI Logic Generator
     const generateQuizQuestions = useCallback(async (isBackground = false) => {
         if (!currentProfile) return null;
-
-        // ✅ Đã xóa dòng "const currentStats = ..." gây lỗi thừa biến
 
         const randomSeed = Math.floor(Math.random() * 1000000);
         const dynamicConstraint = getRandomConstraints();
@@ -53,7 +51,7 @@ export const useQuizRunner = (currentProfile, config) => { // Đã bỏ userStat
         OUTPUT JSON SCHEMA.
         `;
 
-        // Helper process questions
+        // --- Helper process questions (ĐÃ CẬP NHẬT LOGIC FIX LỖI MATCHING) ---
         const processQuestions = (questions) => {
             return questions.map((q, idx) => {
                 let processedQ = {
@@ -62,7 +60,66 @@ export const useQuizRunner = (currentProfile, config) => { // Đã bỏ userStat
                     type: q.type || 'mcq'
                 };
                 
-                // Sanity check logic
+                // 1. FIX Sorting (Code cũ của bạn)
+                if (processedQ.type === 'sorting') {
+                    if ((!processedQ.items || processedQ.items.length === 0) && processedQ.correctOrder) {
+                        processedQ.items = [...processedQ.correctOrder].sort(() => Math.random() - 0.5);
+                    }
+                    if ((!processedQ.items || processedQ.items.length === 0)) {
+                        const numbers = processedQ.text.match(/\d+/g); 
+                        if (numbers && numbers.length >= 2) {
+                            const sortedNums = [...numbers].sort((a, b) => parseFloat(a) - parseFloat(b));
+                            processedQ.correctOrder = sortedNums;
+                            processedQ.items = [...numbers].sort(() => Math.random() - 0.5);
+                        }
+                    }
+                }
+
+                // 2. ✅ FIX MỚI CHO MATCHING: Tự động khôi phục pairs từ text nếu thiếu
+                if (processedQ.type === 'matching') {
+                    if (!processedQ.pairs || processedQ.pairs.length === 0) {
+                        try {
+                            // Regex tìm pattern: "A) 1+1" hoặc "1) 1+1" trong text
+                            // Tách text làm 2 phần dựa vào chữ "với" (tiếng Việt) hoặc "with"
+                            const parts = processedQ.text.split(/với|with|and/i);
+                            if (parts.length >= 2) {
+                                // Tìm tất cả các biểu thức hoặc số ở vế trái (A, B, C, D)
+                                const leftMatches = parts[0].match(/[A-Za-z0-9]+\)\s*([^,]+)/g);
+                                // Tìm tất cả kết quả ở vế phải (1, 2, 3, 4)
+                                const rightMatches = parts[1].match(/[A-Za-z0-9]+\)\s*([^,]+)/g);
+
+                                if (leftMatches && rightMatches) {
+                                    const cleanVal = (str) => str.replace(/^[A-Za-z0-9]+\)\s*/, '').trim();
+                                    
+                                    const lefts = leftMatches.map(cleanVal);
+                                    const rights = rightMatches.map(cleanVal);
+                                    
+                                    // Logic ghép cặp thông minh: Tính toán vế trái để tìm vế phải tương ứng
+                                    const newPairs = [];
+                                    lefts.forEach(leftExpr => {
+                                        const solvedVal = solveSimpleExpression(leftExpr); // Tính toán: "11 + 19" -> 30
+                                        if (solvedVal !== null) {
+                                            // Tìm kết quả trong danh sách rights
+                                            const matchingRight = rights.find(r => normalizeVal(r) === normalizeVal(solvedVal));
+                                            if (matchingRight) {
+                                                newPairs.push({ left: leftExpr, right: matchingRight });
+                                            }
+                                        }
+                                    });
+                                    
+                                    // Nếu khôi phục được ít nhất 2 cặp -> Gán vào câu hỏi
+                                    if (newPairs.length >= 2) {
+                                        processedQ.pairs = newPairs;
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Lỗi khôi phục matching pairs:", e);
+                        }
+                    }
+                }
+
+                // 3. Logic MCQ cũ (giữ nguyên)
                 if (processedQ.type === 'mcq' || processedQ.type === 'fill_blank' || processedQ.type === 'comparison') {
                     let computedVal = null;
                     if (processedQ.topic === 'finding_x' || processedQ.text.toLowerCase().includes('tìm x')) {
@@ -91,7 +148,7 @@ export const useQuizRunner = (currentProfile, config) => { // Đã bỏ userStat
         }
     }, [currentProfile, config]);
 
-    // Actions
+    // ... (Phần còn lại giữ nguyên)
     const startSession = (questions) => {
         setQuizData(questions);
         setCurrentQIndex(0); setSessionScore(0); setHistory([]);

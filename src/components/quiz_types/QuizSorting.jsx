@@ -5,12 +5,17 @@ import { Undo2, Send } from 'lucide-react';
 const QuizSorting = ({ question, onAnswer, isSubmitted }) => {
     const [ordered, setOrdered] = useState([]);
 
-    // ✅ SỬA ĐỔI: Dùng Lazy Initialization để shuffle ngay khi khởi tạo state
+    // ✅ FIX: Logic khởi tạo thông minh hơn (Safety Init)
     const [available, setAvailable] = useState(() => {
-        if (question.items) {
-            // Tạo bản sao mảng và shuffle
+        // Ưu tiên 1: Lấy từ items do API trả về
+        if (question.items && question.items.length > 0) {
             return [...question.items].sort(() => Math.random() - 0.5);
         }
+        // Ưu tiên 2 (Fallback): Nếu AI quên items, lấy từ correctOrder
+        if (question.correctOrder && Array.isArray(question.correctOrder)) {
+            return [...question.correctOrder].sort(() => Math.random() - 0.5);
+        }
+        // Fallback cuối: Trả về rỗng (nhưng hiếm khi xảy ra nếu đã qua xử lý ở useQuizRunner)
         return [];
     });
 
@@ -21,12 +26,20 @@ const QuizSorting = ({ question, onAnswer, isSubmitted }) => {
 
     const handleReset = () => {
         setOrdered([]);
-        // Shuffle lại khi bấm nút Reset
-        setAvailable([...question.items].sort(() => Math.random() - 0.5)); 
+        
+        // ✅ FIX: Logic Reset cũng phải áp dụng Fallback tương tự
+        let sourceList = [];
+        if (question.items && question.items.length > 0) {
+            sourceList = question.items;
+        } else if (question.correctOrder) {
+            sourceList = question.correctOrder;
+        }
+        
+        setAvailable([...sourceList].sort(() => Math.random() - 0.5)); 
     };
 
     const handleSubmit = () => {
-        onAnswer(ordered); // Trả về mảng kết quả
+        onAnswer(ordered);
     };
 
     return (
@@ -35,7 +48,7 @@ const QuizSorting = ({ question, onAnswer, isSubmitted }) => {
                 Chạm vào các ô bên dưới theo đúng thứ tự
             </p>
 
-            {/* Drop Zone - Nơi chứa các từ đã chọn */}
+            {/* Drop Zone */}
             <div className="min-h-[100px] bg-slate-100 rounded-3xl border-2 border-dashed border-indigo-200 p-4 mb-6 flex flex-wrap gap-2 justify-center items-center content-center transition-all">
                 {ordered.length === 0 && <span className="text-slate-300 font-bold text-sm">Kết quả sẽ hiện ở đây</span>}
                 {ordered.map((item, idx) => (
@@ -45,7 +58,7 @@ const QuizSorting = ({ question, onAnswer, isSubmitted }) => {
                 ))}
             </div>
 
-            {/* Source Zone - Nơi chứa các từ để chọn */}
+            {/* Source Zone */}
             {!isSubmitted ? (
                 <>
                     <div className="flex flex-wrap gap-3 justify-center mb-8">
@@ -54,6 +67,11 @@ const QuizSorting = ({ question, onAnswer, isSubmitted }) => {
                                 {item}
                             </ClayButton>
                         ))}
+                        {available.length === 0 && ordered.length === 0 && (
+                            <div className="text-red-400 font-bold text-sm bg-red-50 p-2 rounded-lg border border-red-100">
+                                ⚠️ Lỗi dữ liệu câu hỏi. Vui lòng bỏ qua câu này.
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex gap-4 mt-auto">

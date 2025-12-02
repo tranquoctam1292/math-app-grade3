@@ -1,6 +1,7 @@
+// src/hooks/useUserData.js
 import { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { db, appId } from '../lib/firebase';
+import { db, appId, auth } from '../lib/firebase'; // ✅ Thêm auth vào import
 import { SEMESTER_DEFAULT_TOPICS } from '../lib/constants';
 
 export const useUserData = (appUser) => {
@@ -18,12 +19,9 @@ export const useUserData = (appUser) => {
     // Load data khi user thay đổi
     useEffect(() => {
         const loadData = async () => {
-            if (!appUser || !appUser.uid) {
-                // Reset data khi không có user
-                setProfiles([]);
-                setPiggyBank(0);
-                setRedemptionHistory([]);
-                setUserStats({});
+            // ✅ FIX: Chỉ load khi đã có appUser VÀ Firebase Auth đã sẵn sàng
+            if (!appUser || !appUser.uid || !auth.currentUser) {
+                // Chưa sẵn sàng load
                 return;
             }
             
@@ -59,15 +57,21 @@ export const useUserData = (appUser) => {
                 }
             } catch (e) {
                 console.error("Lỗi load user data:", e);
+                // ✅ FIX: Tự động reset nếu lỗi quyền truy cập (Permission Denied)
+                if (e.code === 'permission-denied' || e.message.includes('Missing or insufficient permissions')) {
+                    console.warn("Phát hiện lỗi session cũ, đang reset...");
+                    localStorage.removeItem('math_app_user_session');
+                    window.location.reload(); // Tải lại trang để tạo session mới
+                }
             } finally {
                 setIsLoadingData(false);
             }
         };
 
         loadData();
-    }, [appUser]);
+    }, [appUser]); // Dependency
 
-    // Hàm helper để save nhanh (Internal use)
+    // Hàm helper để save nhanh
     const saveData = async (newData) => {
         if (!appUser || !appUser.uid) return;
         try {
@@ -75,17 +79,15 @@ export const useUserData = (appUser) => {
             await updateDoc(userDocRef, newData);
         } catch (e) {
             console.error("Lỗi save data:", e);
-            throw e; // Ném lỗi để UI có thể bắt được nếu cần
         }
     };
 
-    // ✅ Hàm xử lý logic đổi tiền (Transaction Logic)
+    // Hàm xử lý đổi tiền
     const redeemCash = async (item) => {
         if (piggyBank < item.value) {
             return { success: false, message: "Số dư không đủ để đổi quà này!" };
         }
 
-        // Tính toán số dư mới
         const newBalance = piggyBank - item.value;
         const newHistory = [
             ...redemptionHistory, 
@@ -98,11 +100,9 @@ export const useUserData = (appUser) => {
         ];
 
         try {
-            // 1. Cập nhật State cục bộ ngay lập tức (Optimistic UI update)
             setPiggyBank(newBalance);
             setRedemptionHistory(newHistory);
 
-            // 2. Cập nhật Firebase
             await saveData({ 
                 piggyBank: newBalance, 
                 redemptionHistory: newHistory 
@@ -111,7 +111,6 @@ export const useUserData = (appUser) => {
             return { success: true, message: "Đổi quà thành công! Số dư đã được cập nhật." };
         } catch (error) {
             console.error("Lỗi giao dịch:", error);
-            // Rollback state nếu cần (ở đây ta giữ đơn giản, có thể reload lại trang)
             return { success: false, message: "Lỗi kết nối, vui lòng thử lại sau." };
         }
     };
@@ -124,6 +123,6 @@ export const useUserData = (appUser) => {
         config, setConfig,
         isLoadingData,
         saveData,
-        redeemCash // Export hàm này để App sử dụng
+        redeemCash
     };
 };

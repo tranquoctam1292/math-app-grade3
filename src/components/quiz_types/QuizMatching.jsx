@@ -2,24 +2,38 @@ import React, { useState } from 'react';
 import { ClayButton } from '../../lib/helpers';
 
 const QuizMatching = ({ question, onAnswer, isSubmitted }) => {
-    // ✅ SỬA: Bỏ "setLeftItems" vì không dùng đến
+    // Logic khởi tạo an toàn
     const [leftItems] = useState(() => {
-        if (!question.pairs) return [];
+        if (!question.pairs || !Array.isArray(question.pairs)) return [];
         return question.pairs.map((p, i) => ({ id: `L${i}`, val: p.left, pairId: i }));
     });
 
-    // ✅ SỬA: Bỏ "setRightItems" vì không dùng đến
     const [rightItems] = useState(() => {
-        if (!question.pairs) return [];
+        if (!question.pairs || !Array.isArray(question.pairs)) return [];
         const rights = question.pairs.map((p, i) => ({ id: `R${i}`, val: p.right, pairId: i }));
         return rights.sort(() => Math.random() - 0.5);
     });
-    
-    // Đã xóa useEffect(...)
 
     const [selectedLeft, setSelectedLeft] = useState(null);
-    const [matchedPairs, setMatchedPairs] = useState({}); // { leftId: rightId }
-    const [wrongPair, setWrongPair] = useState(null); // Để hiển thị animation sai
+    const [matchedPairs, setMatchedPairs] = useState({});
+    const [wrongPair, setWrongPair] = useState(null);
+
+    // ✅ Hiển thị fallback nếu dữ liệu lỗi
+    if (leftItems.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-4">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl">🧩</div>
+                <h3 className="text-lg font-bold text-slate-700">Lỗi hiển thị câu hỏi</h3>
+                <p className="text-sm text-slate-500">Dữ liệu ghép cặp bị thiếu. Bé hãy bấm "Bỏ qua" hoặc nộp bài để sang câu tiếp theo nhé!</p>
+                {/* Nút cứu cánh để qua màn */}
+                {!isSubmitted && (
+                    <ClayButton onClick={() => onAnswer(true)} colorClass="bg-indigo-500 text-white" className="px-6 py-3 font-bold">
+                        Bỏ qua câu này
+                    </ClayButton>
+                )}
+            </div>
+        );
+    }
 
     const handleLeftClick = (item) => {
         if (isSubmitted || matchedPairs[item.id]) return;
@@ -30,19 +44,15 @@ const QuizMatching = ({ question, onAnswer, isSubmitted }) => {
     const handleRightClick = (item) => {
         if (isSubmitted || !selectedLeft) return;
         
-        // Check logic ghép đôi (Dựa vào index ban đầu pairId)
         if (selectedLeft.pairId === item.pairId) {
-            // Đúng
             const newMatches = { ...matchedPairs, [selectedLeft.id]: item.id };
             setMatchedPairs(newMatches);
             setSelectedLeft(null);
 
-            // Kiểm tra xem đã xong hết chưa
             if (Object.keys(newMatches).length === leftItems.length) {
-                setTimeout(() => onAnswer(true), 500); // Tự động submit TRUE nếu đúng hết
+                setTimeout(() => onAnswer(true), 500);
             }
         } else {
-            // Sai
             setWrongPair({ left: selectedLeft.id, right: item.id });
             setTimeout(() => {
                 setWrongPair(null);
@@ -52,7 +62,7 @@ const QuizMatching = ({ question, onAnswer, isSubmitted }) => {
     };
 
     return (
-        <div className="flex gap-4 justify-between h-full">
+        <div className="flex gap-2 sm:gap-4 justify-between h-full">
             {/* Cột Trái */}
             <div className="flex-1 flex flex-col gap-3 justify-center">
                 {leftItems.map((item) => {
@@ -69,7 +79,7 @@ const QuizMatching = ({ question, onAnswer, isSubmitted }) => {
                         <ClayButton 
                             key={item.id} 
                             onClick={() => handleLeftClick(item)}
-                            className={`min-h-[60px] font-bold text-sm sm:text-base px-2 ${bgClass}`}
+                            className={`min-h-[60px] font-bold text-sm sm:text-base px-2 break-words whitespace-normal ${bgClass}`}
                         >
                             {item.val}
                         </ClayButton>
@@ -80,7 +90,6 @@ const QuizMatching = ({ question, onAnswer, isSubmitted }) => {
             {/* Cột Phải */}
             <div className="flex-1 flex flex-col gap-3 justify-center">
                 {rightItems.map((item) => {
-                    // Tìm xem item này đã được ghép với left nào chưa
                     const isMatched = Object.values(matchedPairs).includes(item.id);
                     const isWrong = wrongPair?.right === item.id;
 
@@ -92,7 +101,7 @@ const QuizMatching = ({ question, onAnswer, isSubmitted }) => {
                         <ClayButton 
                             key={item.id} 
                             onClick={() => handleRightClick(item)}
-                            className={`min-h-[60px] font-bold text-sm sm:text-base px-2 ${bgClass}`}
+                            className={`min-h-[60px] font-bold text-sm sm:text-base px-2 break-words whitespace-normal ${bgClass}`}
                         >
                             {item.val}
                         </ClayButton>
