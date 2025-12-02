@@ -49,10 +49,11 @@ export const useQuizRunner = (currentProfile, config) => {
         const aiPrompt = `
         Mã phiên: ${randomSeed}. Vai trò: GV Toán lớp 3. Tạo 10 câu hỏi JSON.
         BỐI CẢNH: ${config.semester === 'hk1' ? 'HK1' : 'HK2'}. Chủ đề: ${randomTheme}.
-        NỘI DUNG TẬP TRUNG: ${topicLabels}.
+        CHỈ TẠO CÂU HỎI VỀ CHỦ ĐỀ: ${topicLabels}. TUYỆT ĐỐI KHÔNG tạo câu hỏi ngoài các chủ đề này.
         YÊU CẦU: ${dynamicConstraint}. Câu văn ngắn gọn. TUYỆT ĐỐI KHÔNG dùng đơn vị "tá", "lạng". Sử dụng đơn vị chuẩn: kg, g, lít, ml, km, m, cm, mm.
         QUY TẮC: 'correctVal' là số/từ đơn giản. 'options' đủ 4 giá trị.
         TYPES: mcq(40%), fill_blank(20%), comparison(10%), sorting(15%), matching(15%).
+        Lưu ý: Nếu chủ đề là Hình học, hãy ưu tiên Type 'mcq' và 'comparison', giảm bớt 'sorting' nếu không phù hợp.
         OUTPUT JSON SCHEMA.
         `;
 
@@ -130,8 +131,8 @@ export const useQuizRunner = (currentProfile, config) => {
 
                             const numPattern = /[1-4]\s*[).:-]\s*[^,;\n]+/g; 
                             let leftRaw = extractItems(splitParts[0], numPattern);
-                            // ✅ FIX: Xóa 'rightRaw' vì không dùng đến
-                            
+                            // 
+
                             if (leftRaw.length === 0) {
                                 // ✅ FIX: Sửa lỗi Regex "Unnecessary escape character" (\+ -> +, \* -> *)
                                 leftRaw = processedQ.text.match(/\d+\s*[+\-x*]\s*\d+/g) || [];
@@ -143,7 +144,7 @@ export const useQuizRunner = (currentProfile, config) => {
                                 if (solvedLeft !== null) {
                                     const matchRight = String(solvedLeft);
                                     if (processedQ.text.includes(matchRight)) {
-                                         newPairs.push({ left: leftExpr, right: matchRight });
+                                            newPairs.push({ left: leftExpr, right: matchRight });
                                     }
                                 }
                             });
@@ -165,7 +166,26 @@ export const useQuizRunner = (currentProfile, config) => {
         } catch (e) {
             console.warn("AI Error, using backup:", e);
             if (isBackground) return null;
-            return processQuestions([...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random()).slice(0, 10));
+
+            // --- FIX: Lọc câu hỏi backup theo chủ đề đã chọn ---
+            let filteredBackup = BACKUP_QUESTIONS;
+            
+            // Chỉ lọc nếu người dùng có chọn chủ đề cụ thể (không rỗng)
+            if (config.selectedTopics && config.selectedTopics.length > 0) {
+                filteredBackup = BACKUP_QUESTIONS.filter(q => 
+                    // So sánh topic của câu hỏi với danh sách topic người dùng chọn
+                    config.selectedTopics.includes(q.topic)
+                );
+                
+                // Nếu lọc xong mà ít quá (dưới 5 câu) thì lấy thêm các câu khác để đủ bài làm
+                if (filteredBackup.length < 5) {
+                    const others = BACKUP_QUESTIONS.filter(q => !config.selectedTopics.includes(q.topic));
+                    filteredBackup = [...filteredBackup, ...others];
+                }
+            }
+
+            // Trộn và lấy 10 câu
+            return processQuestions([...filteredBackup].sort(() => 0.5 - Math.random()).slice(0, 10));
         }
     }, [currentProfile, config]);
 
