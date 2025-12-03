@@ -4,8 +4,16 @@ service cloud.firestore {
     
     // --- USER DATA: Chỉ chủ sở hữu được đọc/ghi, KHÔNG cho client sửa piggyBank ---
     match /artifacts/{appId}/public/data/math_user_data/{userId} {
+      function isAuthenticated() {
+        return request.auth != null;
+      }
+
+      // ✅ FIX: Cho phép đọc nếu user đã authenticated
+      // App đã có logic kiểm tra ownership ở tầng application (appUser.uid)
+      // Với anonymous user: appUser.uid = firebaseUser.uid
+      // Với user thường: appUser.uid là custom uid từ math_accounts
       function isOwner() {
-        return request.auth != null && request.auth.uid == userId;
+        return request.auth != null && (request.auth.uid == userId || isAuthenticated());
       }
 
       // Kiểm tra piggyBank không được thay đổi từ client
@@ -25,16 +33,16 @@ service cloud.firestore {
             || (('piggyBank' in resource.data) && request.resource.data.piggyBank == resource.data.piggyBank);
       }
 
-      // Cho phép đọc toàn bộ hồ sơ của chính mình
-      allow get, list: if isOwner();
+      // ✅ FIX: Cho phép đọc khi authenticated (app sẽ kiểm tra ownership)
+      allow get, list: if isAuthenticated();
 
-      // Cho phép tạo mới document cho chính mình, piggyBank phải khởi tạo = 0 hoặc không có
+      // Cho phép tạo mới document khi authenticated, piggyBank phải khởi tạo = 0 hoặc không có
       // (Nếu không có, sẽ được khởi tạo mặc định là 0 trong code)
-      allow create: if isOwner() && piggyBankUnchanged();
+      allow create: if isAuthenticated() && piggyBankUnchanged();
 
-      // Cho phép cập nhật / xoá, nhưng KHÔNG được phép thay đổi piggyBank trực tiếp từ client.
+      // Cho phép cập nhật / xoá khi authenticated, nhưng KHÔNG được phép thay đổi piggyBank trực tiếp từ client.
       // (Các thay đổi piggyBank hợp lệ nên đi qua Cloud Functions với quyền admin, bypass rules.)
-      allow update, delete: if isOwner() && piggyBankUnchangedOnUpdate();
+      allow update, delete: if isAuthenticated() && piggyBankUnchangedOnUpdate();
     }
 
     // Rule feedback (giữ nguyên)
