@@ -389,7 +389,124 @@ const MathApp = () => {
       const formattedQuiz = questions.map((q, idx) => {
           let trueVal, options = [];
           
-          if (q.logic_type === 'comparison') {
+          // ✅ FIX: Xử lý câu hỏi "số nào lớn nhất/nhỏ nhất"
+          const textLower = q.text.toLowerCase();
+          const isFindLargest = textLower.includes('số nào lớn nhất') || textLower.includes('số lớn nhất');
+          const isFindSmallest = textLower.includes('số nào nhỏ nhất') || textLower.includes('số nhỏ nhất');
+          
+          if (isFindLargest || isFindSmallest) {
+              // Extract các số từ text
+              // Trước tiên, tách các số bằng dấu phẩy hoặc dấu chấm phẩy (phân cách giữa các số)
+              // Ví dụ: "12.345, 54.321, 23.451" -> ["12.345", "54.321", "23.451"]
+              let textToParse = q.text;
+              
+              // Tìm phần sau dấu hai chấm (nếu có) hoặc phần chứa danh sách số
+              const colonMatch = textToParse.match(/[:：]\s*(.+)/);
+              if (colonMatch) {
+                  textToParse = colonMatch[1];
+              }
+              
+              // Tách các số bằng dấu phẩy hoặc dấu chấm phẩy
+              const numberStrings = textToParse.split(/[,;，；]\s*/).map(s => s.trim()).filter(s => s.length > 0);
+              
+              // Nếu không tách được bằng dấu phẩy, thử dùng regex
+              let matches = numberStrings.length >= 2 ? numberStrings : q.text.match(/(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:[.,]\d+)?)/g);
+              
+              if (matches && matches.length >= 2) {
+                  // Chuẩn hóa số: xử lý cả dấu chấm và phẩy
+                  // Format Việt Nam: dấu chấm (.) phân cách hàng nghìn, dấu phẩy (,) thập phân
+                  // Format quốc tế: dấu phẩy (,) phân cách hàng nghìn, dấu chấm (.) thập phân
+                  const normalizedNumbers = matches.map(numStr => {
+                      let clean = numStr.trim();
+                      
+                      // Nếu có cả dấu chấm và phẩy
+                      if (clean.includes('.') && clean.includes(',')) {
+                          // Kiểm tra vị trí: dấu nào gần cuối hơn là thập phân
+                          const lastDot = clean.lastIndexOf('.');
+                          const lastComma = clean.lastIndexOf(',');
+                          
+                          if (lastDot > lastComma) {
+                              // Dấu chấm ở cuối -> dấu chấm là thập phân, phẩy là phân cách hàng nghìn
+                              clean = clean.replace(/,/g, '');
+                          } else {
+                              // Dấu phẩy ở cuối -> dấu phẩy là thập phân, chấm là phân cách hàng nghìn
+                              clean = clean.replace(/\./g, '').replace(/,/g, '.');
+                          }
+                      }
+                      // Nếu chỉ có dấu chấm
+                      else if (clean.includes('.') && !clean.includes(',')) {
+                          // Kiểm tra: nếu có 3 chữ số sau dấu chấm cuối cùng -> có thể là phân cách hàng nghìn
+                          const lastDotIndex = clean.lastIndexOf('.');
+                          const afterDot = clean.substring(lastDotIndex + 1);
+                          if (afterDot.length === 3 && /^\d{3}$/.test(afterDot) && clean.split('.').length > 2) {
+                              // Có nhiều dấu chấm -> phân cách hàng nghìn
+                              clean = clean.replace(/\./g, '');
+                          }
+                          // Nếu không, coi là thập phân (giữ nguyên)
+                      }
+                      // Nếu chỉ có dấu phẩy
+                      else if (clean.includes(',') && !clean.includes('.')) {
+                          // Kiểm tra: nếu có 3 chữ số sau dấu phẩy cuối cùng -> phân cách hàng nghìn
+                          const lastCommaIndex = clean.lastIndexOf(',');
+                          const afterComma = clean.substring(lastCommaIndex + 1);
+                          if (afterComma.length === 3 && /^\d{3}$/.test(afterComma) && clean.split(',').length > 2) {
+                              // Có nhiều dấu phẩy -> phân cách hàng nghìn
+                              clean = clean.replace(/,/g, '');
+                          } else {
+                              // Thập phân (format Việt Nam)
+                              clean = clean.replace(/,/g, '.');
+                          }
+                      }
+                      
+                      const parsed = parseFloat(clean);
+                      return isNaN(parsed) || !isFinite(parsed) ? null : parsed;
+                  }).filter(n => n !== null);
+                  
+                  if (normalizedNumbers.length >= 2) {
+                      // Tìm số lớn nhất hoặc nhỏ nhất
+                      const targetValue = isFindLargest 
+                          ? Math.max(...normalizedNumbers)
+                          : Math.min(...normalizedNumbers);
+                      
+                      // Dùng các số từ câu hỏi làm options (giữ format gốc nếu có thể)
+                      options = matches.slice(0, normalizedNumbers.length).map((match, i) => {
+                          // Giữ format gốc nếu có thể, nhưng đảm bảo đúng giá trị
+                          return String(normalizedNumbers[i]);
+                      });
+                      
+                      // Đảm bảo có đủ 4 options (nếu thiếu, thêm số ngẫu nhiên gần đó)
+                      while (options.length < 4 && options.length < 10) {
+                          const randomNum = targetValue + (Math.random() > 0.5 ? 1 : -1) * (Math.floor(Math.random() * 10) + 1);
+                          const randomStr = String(randomNum);
+                          if (!options.includes(randomStr)) {
+                              options.push(randomStr);
+                          }
+                      }
+                      
+                      // Giới hạn tối đa 4 options
+                      options = options.slice(0, 4);
+                      trueVal = String(targetValue);
+                  }
+              }
+              
+              // Nếu không extract được số, fallback về logic cũ
+              if (!options || options.length < 2) {
+                  const expr = q.expression_value || q.text; 
+                  const numVal = evaluateMathLogic(expr); 
+                  const safeNumVal = numVal !== null ? numVal : 0;
+                  trueVal = String(safeNumVal);
+                  const d1 = safeNumVal + Math.floor(Math.random() * 5) + 1; 
+                  const d2 = Math.max(0, safeNumVal - Math.floor(Math.random() * 5) - 1); 
+                  const d3 = safeNumVal + 10; 
+                  const rawOptions = [safeNumVal, d1, d2, d3];
+                  const uniqueOptions = [...new Set(rawOptions)];
+                  while(uniqueOptions.length < 4) {
+                      uniqueOptions.push(safeNumVal + uniqueOptions.length + 5);
+                  }
+                  options = uniqueOptions.map(String);
+              }
+          }
+          else if (q.logic_type === 'comparison') {
                 // Xử lý bài toán so sánh (< > =)
                 const resultSign = compareExpressions(q.expression_left, q.expression_right); 
                 trueVal = resultSign || "="; 
