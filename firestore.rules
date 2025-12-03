@@ -12,9 +12,6 @@ service cloud.firestore {
       // App đã có logic kiểm tra ownership ở tầng application (appUser.uid)
       // Với anonymous user: appUser.uid = firebaseUser.uid
       // Với user thường: appUser.uid là custom uid từ math_accounts
-      function isOwner() {
-        return request.auth != null && (request.auth.uid == userId || isAuthenticated());
-      }
 
       // Kiểm tra piggyBank không được thay đổi từ client
       // Nếu piggyBank không có trong request.resource (client không cố gắng thay đổi) -> cho phép
