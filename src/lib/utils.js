@@ -96,6 +96,12 @@ export const solveSimpleExpression = (text) => {
     try {
         if (!text || typeof text !== 'string') return null;
         
+        // ✅ FIX: Bỏ qua nếu là comparison hoặc equation question
+        const textLower = text.toLowerCase();
+        if (textLower.includes('...') || textLower.includes('điền dấu') || textLower.includes('tìm x')) {
+            return null;
+        }
+        
         // Làm sạch text trước khi tính
         let clean = cleanMathText(text)
             .replace(/×/g, '*') // Thay × trước
@@ -109,14 +115,25 @@ export const solveSimpleExpression = (text) => {
         // Xử lý trường hợp chỉ còn lại số (ví dụ: " 500 ")
         if (/^-?\d+(\.\d+)?$/.test(clean)) return parseFloat(clean);
 
+        // ✅ FIX: Kiểm tra xem có phải là biểu thức hợp lệ không
+        // Bỏ qua nếu có dấu "..." hoặc các ký tự không hợp lệ
+        if (clean.includes('...') || clean.includes('___')) return null;
+
         // Nếu chuỗi rỗng hoặc chứa ký tự chữ cái (trừ dấu toán học), return null
         // Cho phép: số, dấu +, -, *, /, dấu ngoặc, dấu chấm thập phân
         if (!clean || /[a-zđ]/i.test(clean.replace(/[0-9+\-*/().\s]/g, ''))) return null;
 
+        // ✅ FIX: Kiểm tra xem có ít nhất một phép toán không
+        if (!/[+\-*/]/.test(clean)) return null;
+
         const result = evaluate(clean);
         return (isFinite(result) && !isNaN(result)) ? parseFloat(result.toFixed(2)) : null; 
     } catch (e) {
-        console.warn("solveSimpleExpression error:", e, "Text:", text);
+        // ✅ FIX: Chỉ log warning nếu không phải là comparison/equation question
+        const textLower = (text || '').toLowerCase();
+        if (!textLower.includes('...') && !textLower.includes('tìm x')) {
+            console.warn("solveSimpleExpression error:", e, "Text:", text);
+        }
         return null;
     }
 };

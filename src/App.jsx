@@ -491,22 +491,43 @@ const MathApp = () => {
               
               // Nếu không extract được số, fallback về logic cũ
               if (!options || options.length < 2) {
-                  const expr = q.expression_value || q.text; 
-                  // ✅ FIX: Dùng solveSimpleExpression để xử lý phân số (1/3, 24/3, etc.)
-                  let numVal = solveSimpleExpression(expr);
-                  // Nếu solveSimpleExpression không tính được, thử evaluateMathLogic
-                  if (numVal === null) {
-                      numVal = evaluateMathLogic(expr);
+                  const expr = q.expression_value;
+                  let numVal = null;
+                  
+                  if (expr) {
+                      // ✅ FIX: Dùng solveSimpleExpression để xử lý phân số (1/3, 24/3, etc.)
+                      numVal = solveSimpleExpression(expr);
+                      // Nếu solveSimpleExpression không tính được, thử evaluateMathLogic
+                      if (numVal === null) {
+                          numVal = evaluateMathLogic(expr);
+                      }
+                  } else {
+                      // Thử parse từ text
+                      const multiplyMatch = q.text.match(/(\d+)\s*[x×]\s*(\d+)/i);
+                      if (multiplyMatch) {
+                          numVal = parseInt(multiplyMatch[1]) * parseInt(multiplyMatch[2]);
+                      }
                   }
-                  const safeNumVal = numVal !== null ? Math.round(numVal) : 0;
+                  
+                  if (numVal === null || isNaN(numVal)) {
+                      console.warn("Không thể tính toán câu hỏi (số nào lớn nhất):", q.text);
+                      numVal = 0;
+                  }
+                  
+                  const safeNumVal = Math.round(numVal);
                   trueVal = String(safeNumVal);
                   const d1 = safeNumVal + Math.floor(Math.random() * 5) + 1; 
-                  const d2 = Math.max(0, safeNumVal - Math.floor(Math.random() * 5) - 1); 
+                  const d2 = Math.max(1, safeNumVal - Math.floor(Math.random() * 5) - 1); 
                   const d3 = safeNumVal + 10; 
                   const rawOptions = [safeNumVal, d1, d2, d3];
                   const uniqueOptions = [...new Set(rawOptions)];
                   while(uniqueOptions.length < 4) {
-                      uniqueOptions.push(safeNumVal + uniqueOptions.length + 5);
+                      const newOption = safeNumVal + (uniqueOptions.length % 2 === 0 ? 1 : -1) * (uniqueOptions.length * 3 + 1);
+                      if (newOption > 0 && !uniqueOptions.includes(newOption)) {
+                          uniqueOptions.push(newOption);
+                      } else {
+                          uniqueOptions.push(safeNumVal + uniqueOptions.length + 5);
+                      }
                   }
                   options = uniqueOptions.map(String);
               }
@@ -520,30 +541,61 @@ const MathApp = () => {
           } 
           else {
                 // Xử lý bài toán tính toán / toán đố (Mặc định)
-                // Ưu tiên dùng expression_value, nếu không có thì fallback thử parse từ text (cho backup cũ)
-                const expr = q.expression_value || q.text; 
-                // ✅ FIX: Dùng solveSimpleExpression để xử lý phân số (1/3, 24/3, etc.)
-                let numVal = solveSimpleExpression(expr);
-                // Nếu solveSimpleExpression không tính được, thử evaluateMathLogic
-                if (numVal === null) {
-                    numVal = evaluateMathLogic(expr);
+                // ✅ FIX: Chỉ xử lý nếu có expression_value (không phải comparison/equation)
+                const expr = q.expression_value;
+                let numVal = null;
+                
+                if (expr) {
+                    // ✅ FIX: Dùng solveSimpleExpression để xử lý phân số (1/3, 24/3, etc.)
+                    numVal = solveSimpleExpression(expr);
+                    // Nếu solveSimpleExpression không tính được, thử evaluateMathLogic
+                    if (numVal === null) {
+                        numVal = evaluateMathLogic(expr);
+                    }
+                } else {
+                    // Nếu không có expression_value, thử parse từ text (fallback)
+                    // Nhưng chỉ với các câu hỏi tính toán đơn giản
+                    const textLower = q.text.toLowerCase();
+                    if (!textLower.includes('tìm x') && !textLower.includes('...') && !textLower.includes('điền dấu')) {
+                        numVal = solveSimpleExpression(q.text);
+                        if (numVal === null) {
+                            numVal = evaluateMathLogic(q.text);
+                        }
+                    }
                 }
                 
-                // Nếu tính ra null (lỗi), gán giá trị mặc định an toàn để không crash
-                const safeNumVal = numVal !== null ? Math.round(numVal) : 0;
+                // ✅ FIX: Nếu tính ra null (lỗi), log warning và dùng giá trị mặc định
+                if (numVal === null || isNaN(numVal)) {
+                    console.warn("Không thể tính toán câu hỏi:", q.text, "Expression:", expr);
+                    // Tạo giá trị mặc định dựa trên text (ví dụ: 3 x 9 = 27)
+                    const multiplyMatch = q.text.match(/(\d+)\s*[x×]\s*(\d+)/i);
+                    if (multiplyMatch) {
+                        numVal = parseInt(multiplyMatch[1]) * parseInt(multiplyMatch[2]);
+                    } else {
+                        numVal = 0; // Fallback cuối cùng
+                    }
+                }
+                
+                const safeNumVal = Math.round(numVal);
                 trueVal = String(safeNumVal);
                 
-                // Code TỰ SINH ra 3 đáp án nhiễu (Distractors)
+                // ✅ FIX: Tạo options đảm bảo có đáp án đúng và các đáp án nhiễu hợp lý
                 const d1 = safeNumVal + Math.floor(Math.random() * 5) + 1; 
-                const d2 = Math.max(0, safeNumVal - Math.floor(Math.random() * 5) - 1); 
+                const d2 = Math.max(1, safeNumVal - Math.floor(Math.random() * 5) - 1); 
                 const d3 = safeNumVal + 10; 
                 
-                // Tạo mảng options unique
+                // Tạo mảng options unique, đảm bảo có đáp án đúng
                 const rawOptions = [safeNumVal, d1, d2, d3];
                 const uniqueOptions = [...new Set(rawOptions)];
-                // Nếu sau khi lọc trùng bị thiếu, bù thêm số ngẫu nhiên
+                
+                // ✅ FIX: Nếu sau khi lọc trùng bị thiếu, bù thêm số ngẫu nhiên
                 while(uniqueOptions.length < 4) {
-                    uniqueOptions.push(safeNumVal + uniqueOptions.length + 5);
+                    const newOption = safeNumVal + (uniqueOptions.length % 2 === 0 ? 1 : -1) * (uniqueOptions.length * 3 + 1);
+                    if (newOption > 0 && !uniqueOptions.includes(newOption)) {
+                        uniqueOptions.push(newOption);
+                    } else {
+                        uniqueOptions.push(safeNumVal + uniqueOptions.length + 5);
+                    }
                 }
 
                 options = uniqueOptions.map(String);
