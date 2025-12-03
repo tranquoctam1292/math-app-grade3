@@ -66,7 +66,7 @@ const BACKUP_QUESTIONS = [
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
 // LƯU Ý: Bạn cần đảm bảo file lib/utils.js đã có hàm evaluateMathLogic và compareExpressions
-import { getDeviceId, fmt, evaluateMathLogic, compareExpressions, encodeEmail } from './lib/utils.js';
+import { getDeviceId, fmt, evaluateMathLogic, compareExpressions, encodeEmail, solveSimpleExpression } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
@@ -492,8 +492,13 @@ const MathApp = () => {
               // Nếu không extract được số, fallback về logic cũ
               if (!options || options.length < 2) {
                   const expr = q.expression_value || q.text; 
-                  const numVal = evaluateMathLogic(expr); 
-                  const safeNumVal = numVal !== null ? numVal : 0;
+                  // ✅ FIX: Dùng solveSimpleExpression để xử lý phân số (1/3, 24/3, etc.)
+                  let numVal = solveSimpleExpression(expr);
+                  // Nếu solveSimpleExpression không tính được, thử evaluateMathLogic
+                  if (numVal === null) {
+                      numVal = evaluateMathLogic(expr);
+                  }
+                  const safeNumVal = numVal !== null ? Math.round(numVal) : 0;
                   trueVal = String(safeNumVal);
                   const d1 = safeNumVal + Math.floor(Math.random() * 5) + 1; 
                   const d2 = Math.max(0, safeNumVal - Math.floor(Math.random() * 5) - 1); 
@@ -517,10 +522,15 @@ const MathApp = () => {
                 // Xử lý bài toán tính toán / toán đố (Mặc định)
                 // Ưu tiên dùng expression_value, nếu không có thì fallback thử parse từ text (cho backup cũ)
                 const expr = q.expression_value || q.text; 
-                const numVal = evaluateMathLogic(expr); 
+                // ✅ FIX: Dùng solveSimpleExpression để xử lý phân số (1/3, 24/3, etc.)
+                let numVal = solveSimpleExpression(expr);
+                // Nếu solveSimpleExpression không tính được, thử evaluateMathLogic
+                if (numVal === null) {
+                    numVal = evaluateMathLogic(expr);
+                }
                 
                 // Nếu tính ra null (lỗi), gán giá trị mặc định an toàn để không crash
-                const safeNumVal = numVal !== null ? numVal : 0;
+                const safeNumVal = numVal !== null ? Math.round(numVal) : 0;
                 trueVal = String(safeNumVal);
                 
                 // Code TỰ SINH ra 3 đáp án nhiễu (Distractors)
