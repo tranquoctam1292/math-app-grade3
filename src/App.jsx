@@ -501,11 +501,18 @@ const MathApp = () => {
                       if (numVal === null) {
                           numVal = evaluateMathLogic(expr);
                       }
-                  } else {
-                      // Thử parse từ text
+                  }
+                  
+                  // Fallback: parse từ text với các pattern phổ biến (giống logic chính)
+                  if (numVal === null || isNaN(numVal)) {
                       const multiplyMatch = q.text.match(/(\d+)\s*[x×]\s*(\d+)/i);
                       if (multiplyMatch) {
                           numVal = parseInt(multiplyMatch[1]) * parseInt(multiplyMatch[2]);
+                      } else {
+                          const pattern1 = q.text.match(/(\d+)\s*(?:gói|chiếc|cái|quả|con|viên|bút|hộp|túi|bịch).*?mỗi.*?(?:có|gồm|chứa)\s*(\d+)/i);
+                          if (pattern1) {
+                              numVal = parseInt(pattern1[1]) * parseInt(pattern1[2]);
+                          }
                       }
                   }
                   
@@ -564,14 +571,72 @@ const MathApp = () => {
                     }
                 }
                 
-                // ✅ FIX: Nếu tính ra null (lỗi), log warning và dùng giá trị mặc định
+                // ✅ FIX: Nếu tính ra null (lỗi), parse từ text với các pattern phổ biến
                 if (numVal === null || isNaN(numVal)) {
-                    console.warn("Không thể tính toán câu hỏi:", q.text, "Expression:", expr);
-                    // Tạo giá trị mặc định dựa trên text (ví dụ: 3 x 9 = 27)
-                    const multiplyMatch = q.text.match(/(\d+)\s*[x×]\s*(\d+)/i);
-                    if (multiplyMatch) {
-                        numVal = parseInt(multiplyMatch[1]) * parseInt(multiplyMatch[2]);
-                    } else {
+                    // Pattern 1: "X gói, mỗi gói có Y" → X * Y
+                    const pattern1 = q.text.match(/(\d+)\s*(?:gói|chiếc|cái|quả|con|viên|bút|hộp|túi|bịch|gói mì|gói kẹo).*?mỗi.*?(?:có|gồm|chứa)\s*(\d+)/i);
+                    if (pattern1) {
+                        numVal = parseInt(pattern1[1]) * parseInt(pattern1[2]);
+                    }
+                    
+                    // Pattern 2: "X, mỗi Y có Z" → X * Z
+                    if (numVal === null) {
+                        const pattern2 = q.text.match(/(\d+)\s*[,，].*?mỗi.*?(?:có|gồm|chứa)\s*(\d+)/i);
+                        if (pattern2) {
+                            numVal = parseInt(pattern2[1]) * parseInt(pattern2[2]);
+                        }
+                    }
+                    
+                    // Pattern 3: "gấp X lần" → nhân với X
+                    if (numVal === null) {
+                        const pattern3 = q.text.match(/(\d+).*?gấp\s*(\d+)\s*lần/i);
+                        if (pattern3) {
+                            numVal = parseInt(pattern3[1]) * parseInt(pattern3[2]);
+                        }
+                    }
+                    
+                    // Pattern 4: "1/X của Y" hoặc "Y/X của Z" → Y / X hoặc Z * (Y/X)
+                    if (numVal === null) {
+                        const pattern4 = q.text.match(/(\d+)\s*\/\s*(\d+)\s*(?:của|số|trong)\s*(\d+)/i);
+                        if (pattern4) {
+                            const numerator = parseInt(pattern4[1]);
+                            const denominator = parseInt(pattern4[2]);
+                            const total = parseInt(pattern4[3]);
+                            numVal = Math.round((total * numerator) / denominator);
+                        }
+                    }
+                    
+                    // Pattern 5: "X x Y" hoặc "X × Y" (đã có trong text)
+                    if (numVal === null) {
+                        const multiplyMatch = q.text.match(/(\d+)\s*[x×]\s*(\d+)/i);
+                        if (multiplyMatch) {
+                            numVal = parseInt(multiplyMatch[1]) * parseInt(multiplyMatch[2]);
+                        }
+                    }
+                    
+                    // Pattern 6: "X + Y" hoặc "X - Y"
+                    if (numVal === null) {
+                        const addMatch = q.text.match(/(\d+)\s*\+\s*(\d+)/i);
+                        if (addMatch) {
+                            numVal = parseInt(addMatch[1]) + parseInt(addMatch[2]);
+                        } else {
+                            const subMatch = q.text.match(/(\d+)\s*-\s*(\d+)/i);
+                            if (subMatch) {
+                                numVal = parseInt(subMatch[1]) - parseInt(subMatch[2]);
+                            }
+                        }
+                    }
+                    
+                    // Pattern 7: "X gói, Y gram mỗi gói" → X * Y
+                    if (numVal === null) {
+                        const pattern7 = q.text.match(/(\d+)\s*(?:gói|chiếc|cái).*?(\d+)\s*(?:gram|kg|g|kilogram).*?mỗi/i);
+                        if (pattern7) {
+                            numVal = parseInt(pattern7[1]) * parseInt(pattern7[2]);
+                        }
+                    }
+                    
+                    if (numVal === null || isNaN(numVal)) {
+                        console.warn("Không thể tính toán câu hỏi:", q.text, "Expression:", expr);
                         numVal = 0; // Fallback cuối cùng
                     }
                 }
