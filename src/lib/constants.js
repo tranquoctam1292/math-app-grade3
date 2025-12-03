@@ -41,7 +41,7 @@ export const SEMESTER_CONTENT = {
     hk2: "Phạm vi 100.000 (Số có 5 chữ số). Làm tròn số đến hàng chục/trăm/nghìn/chục nghìn. Chữ số La Mã (I đến XX). Diện tích hình chữ nhật/vuông (cm²). Hình tròn (tâm, bán kính, đường kính). Trung điểm đoạn thẳng. Bảng số liệu thống kê & Khả năng xảy ra sự kiện. Tiền Việt Nam."
 };
 
-export const REWARD_PER_LEVEL = { 2: 200, 3: 300, 4: 350 }; 
+export const REWARD_PER_LEVEL = { 2: 100, 3: 150, 4: 200 }; 
 export const DIFFICULTY_MIX = {
     easy: { 2: 7, 3: 3, 4: 0 },    
     medium: { 2: 4, 3: 4, 4: 2 }, 

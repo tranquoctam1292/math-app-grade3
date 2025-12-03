@@ -16,54 +16,57 @@ import {
   doc, setDoc, getDoc, updateDoc
 } from 'firebase/firestore';
 
-// --- DÁN ĐOẠN NÀY VÀO SAU CÁC DÒNG IMPORT ---
+// --- DỮ LIỆU DỰ PHÒNG (OFFLINE MODE) - ĐÃ CẬP NHẬT FORMAT LOGIC ---
 const BACKUP_QUESTIONS = [
     {
         "text": "Mẹ đi chợ mua 5 chục quả trứng, biếu bà 20 quả. Hỏi mẹ còn lại bao nhiêu quả trứng?",
-        "options": ["30 quả", "20 quả", "50 quả", "70 quả"],
-        "correctVal": "30 quả",
+        "logic_type": "calculation",
+        "expression_value": "50 - 20",
+        "unit": "quả",
         "explanation": "5 chục = 50. Mẹ còn lại: 50 - 20 = 30 (quả).",
         "level": 2,
         "topic": "word_problems"
     },
     {
         "text": "Tìm x, biết: x : 5 = 12",
-        "options": ["60", "7", "17", "2.4"],
-        "correctVal": "60",
+        "logic_type": "calculation",
+        "expression_value": "12 * 5",
         "explanation": "Muốn tìm số bị chia, ta lấy thương nhân với số chia: x = 12 × 5 = 60.",
         "level": 3,
         "topic": "finding_x"
     },
     {
         "text": "Tính nhẩm: 234 + 100 - 34",
-        "options": ["300", "334", "200", "368"],
-        "correctVal": "300",
+        "logic_type": "calculation",
+        "expression_value": "234 + 100 - 34",
         "explanation": "Ta lấy 234 - 34 = 200, sau đó 200 + 100 = 300.",
         "level": 2,
         "topic": "arithmetic"
     },
     {
         "text": "Một hình vuông có cạnh 6cm. Chu vi hình vuông đó là bao nhiêu?",
-        "options": ["24cm", "36cm", "12cm", "24m"],
-        "correctVal": "24cm",
+        "logic_type": "calculation",
+        "expression_value": "6 * 4",
+        "unit": "cm",
         "explanation": "Chu vi hình vuông = cạnh × 4. Vậy chu vi là: 6 × 4 = 24 (cm).",
         "level": 3,
         "topic": "geometry"
     },
     {
-        "text": "Số liền sau của số 9999 là số nào?",
-        "options": ["10000", "9998", "1000", "9990"],
-        "correctVal": "10000",
-        "explanation": "Muốn tìm số liền sau, ta lấy số đó cộng thêm 1 đơn vị: 9999 + 1 = 10000.",
-        "level": 2,
-        "topic": "numbers_roman"
+        "text": "Điền dấu thích hợp: 150 + 30 ... 30 x 6",
+        "logic_type": "comparison",
+        "expression_left": "150 + 30",
+        "expression_right": "30 * 6",
+        "explanation": "Vế trái: 150 + 30 = 180. Vế phải: 30 x 6 = 180. Vì 180 = 180 nên điền dấu =.",
+        "level": 3,
+        "topic": "arithmetic"
     }
 ];
-// --- HẾT PHẦN DÁN ---
 
 // Import modules
 import { ClayButton } from './lib/helpers.jsx';
-import { getDeviceId, fmt, solveSimpleExpression, encodeEmail } from './lib/utils.js';
+// LƯU Ý: Bạn cần đảm bảo file lib/utils.js đã có hàm evaluateMathLogic và compareExpressions
+import { getDeviceId, fmt, evaluateMathLogic, compareExpressions, encodeEmail } from './lib/utils.js';
 import { callGemini } from './lib/gemini.js';
 import { TOPICS_LIST, TOPIC_TRANSLATIONS, SEMESTER_DEFAULT_TOPICS, SEMESTER_CONTENT, REWARD_PER_LEVEL, DIFFICULTY_MIX, SHOP_ITEMS, AVATARS } from './lib/constants.js';
 import { db, auth, appId } from './lib/firebase';
@@ -79,8 +82,6 @@ const ResultScreen = React.lazy(() => import('./components/ResultScreen'));
 const ReportScreen = React.lazy(() => import('./components/ReportScreen'));
 const ConfigScreen = React.lazy(() => import('./components/ConfigScreen'));
 const ShopScreen = React.lazy(() => import('./components/ShopScreen'));
-
-
 
 // --- MAIN APP ---
 const MathApp = () => {
@@ -125,7 +126,6 @@ const MathApp = () => {
       const isAnon = userAccount.isAnon || false;
       
       if (!isAnon) {
-        // Cập nhật devices cho tài khoản có email/pass
         if (!devices.includes(deviceId)) {
           if (devices.length >= 3) {
             setAuthError("Tài khoản đã đăng nhập quá 3 thiết bị.");
@@ -138,7 +138,6 @@ const MathApp = () => {
           }
         }
       } else {
-        // Tài khoản ẩn danh
         userAccount.uid = auth.currentUser.uid;
       }
 
@@ -150,22 +149,19 @@ const MathApp = () => {
   };
 
   const handleAppLogout = async (resetAuth = false) => {
-      // Nếu là chế độ khách (resetAuth=false) thì chỉ thoát khỏi app, không reset auth firebase
       if (resetAuth || (appUser && appUser.isAnon)) {
           try {
               await signOut(auth);
           } catch(e) {
               console.warn("Lỗi sign out:", e);
           }
-          setIsLoading(true); // Kích hoạt lại quá trình xác thực
+          setIsLoading(true);
           setAppUser(null);
           setProfiles([]);
           setCurrentProfile(null);
           localStorage.removeItem('math_app_user_session');
           setGameState('auth');
-          // Sau khi sign out, useEffect sẽ tự động chạy lại initSystemAuth
       } else {
-        // Dùng cho người dùng có tài khoản muốn đăng xuất
         if (window.confirm("Bạn có chắc chắn muốn đăng xuất không?")) {
             setAppUser(null);
             setProfiles([]);
@@ -178,7 +174,6 @@ const MathApp = () => {
 
   // --- XÁC THỰC HỆ THỐNG & KHỞI TẠO ---
   useEffect(() => {
-    // Thêm kiểm tra an toàn: chỉ chạy nếu auth được khởi tạo thành công
     if (!auth) {
       setAppError("Lỗi cấu hình Firebase! Vui lòng kiểm tra file .env hoặc biến môi trường.");
       setIsLoading(false);
@@ -186,7 +181,6 @@ const MathApp = () => {
       return;
     }
 
-    // Chỉ chạy lần đầu tiên khi app load
     if (isLoading && !isAuthReady) {
         const initSystemAuth = async () => {
             try {
@@ -198,7 +192,7 @@ const MathApp = () => {
                 }
             } catch(e) { 
                 console.error("Lỗi xác thực hệ thống:", e); 
-                await signInAnonymously(auth); // Thử lại ẩn danh nếu custom token fail
+                await signInAnonymously(auth);
             }
         };
         initSystemAuth();
@@ -206,13 +200,11 @@ const MathApp = () => {
     
     const unsubscribe = onAuthStateChanged(auth, (u) => {
         setFirebaseUser(u);
-        
         if (u) {
             const savedSession = localStorage.getItem('math_app_user_session');
             if (savedSession) {
                 try {
                     const parsedUser = JSON.parse(savedSession);
-                    // Dùng uid từ firebase nếu user là anon, nếu không thì dùng uid của userAccount
                     const finalUid = parsedUser.isAnon ? u.uid : parsedUser.uid;
                     setAppUser({...parsedUser, uid: finalUid});
                 } catch (e) {
@@ -221,7 +213,6 @@ const MathApp = () => {
                 }
             }
         }
-        
         setIsAuthReady(true);
         setIsLoading(false);
     });
@@ -231,8 +222,7 @@ const MathApp = () => {
 
   // --- TẢI HỒ SƠ & DỮ LIỆU BAN ĐẦU ---
   useEffect(() => {
-    if (!isAuthReady) return; // Đợi Auth sẵn sàng
-    
+    if (!isAuthReady) return;
     if (!appUser) {
         setGameState('auth');
         return;
@@ -251,9 +241,7 @@ const MathApp = () => {
                 setPiggyBank(userData.piggyBank || 0);
                 setRedemptionHistory(userData.redemptionHistory || []);
                 if (userData.config) setConfig(userData.config);
-                
             } else {
-                // Tạo tài liệu mới nếu chưa tồn tại
                 userData = {
                     profiles: [],
                     piggyBank: 0,
@@ -269,8 +257,6 @@ const MathApp = () => {
                 await setDoc(userDocRef, userData);
                 setProfiles([]);
             }
-            
-            // Chuyển sang màn hình chọn hồ sơ
             setGameState('profile_select');
         } catch (e) {
             console.error("Lỗi tải dữ liệu người dùng:", e);
@@ -286,10 +272,9 @@ const MathApp = () => {
     }
   }, [appUser, isAuthReady, firebaseUser]);
 
-
   // --- CHỌN HỒ SƠ VÀ VỀ TRANG CHỦ ---
   useEffect(() => {
-    if (currentProfile && gameState !== 'playing' && gameState !== 'result' && gameState !== 'user_profile' && gameState !== 'report' && gameState !== 'shop' && gameState !== 'config') {
+    if (currentProfile && !['playing', 'result', 'user_profile', 'report', 'shop', 'config'].includes(gameState)) {
       setGameState('home');
     }
   }, [currentProfile, gameState]);
@@ -331,6 +316,7 @@ const MathApp = () => {
       setGameState('home');
   };
 
+  // --- LOGIC TẠO CÂU HỎI MỚI (QUAN TRỌNG) ---
   const handleStartQuiz = async () => {
       if (!currentProfile) { setAppError("Vui lòng chọn hồ sơ học tập trước khi làm bài!"); return; }
       if (config.selectedTopics.length === 0) { setAppError("Vui lòng chọn ít nhất 1 chủ đề ôn tập!"); return; }
@@ -348,35 +334,35 @@ const MathApp = () => {
       const themes = ["Đi chợ/Siêu thị", "Nông trại vui vẻ", "Trường học thân thiện", "Thế giới động vật", "Thám hiểm vũ trụ", "Lễ hội trái cây", "Thể thao năng động"];
       const randomTheme = themes[Math.floor(Math.random() * themes.length)];
 
+      // --- PROMPT KỸ THUẬT MỚI: TÁCH LOGIC VÀ DỮ LIỆU ---
       const aiPrompt = `
-        Vai trò: Giáo viên Toán lớp 3 sáng tạo. Nhiệm vụ: Tạo 10 câu trắc nghiệm JSON ĐA DẠNG, KHÔNG TRÙNG LẶP.
-        CHỦ ĐỀ CỐT TRUYỆN: ${randomTheme} (Hãy lồng ghép bối cảnh này vào các câu toán đố).
-        CẤU HÌNH: ${countsPrompt}. Học kỳ: ${config.semester}.
-        Kiến thức trọng tâm: ${topicLabels}.
-        Chi tiết chương trình: ${semesterDetail}.
-        
-        YÊU CẦU ĐA DẠNG HÓA (Bắt buộc):
-        1. Thay đổi cấu trúc câu hỏi liên tục: 
-           - Đừng chỉ hỏi "Tính...", hãy hỏi "Tìm số còn thiếu", "So sánh", "Điền vào chỗ trống", "Giải đố".
-           - Xen kẽ giữa Phép tính thuần túy và Toán đố (Word Problems).
-        2. Với Toán đố: Sử dụng tên nhân vật, đồ vật, tình huống thực tế phong phú theo chủ đề "${randomTheme}".
-        
-        QUY TẮC HIỂN THỊ (NGHIÊM NGẶT):
-        1. Dùng ký hiệu '×' cho phép nhân, ':' cho phép chia (dạng Unicode). TUYỆT ĐỐI KHÔNG DÙNG LaTeX (\\times, \\div) trong text.
-        2. Dùng 'x' cho biến số tìm x.
-        3. NGÔN NGỮ: 100% TIẾNG VIỆT chuẩn. TUYỆT ĐỐI KHÔNG chèn từ tiếng Anh, tiếng Nga hay mở ngoặc giải thích tiếng nước ngoài.
+        Vai trò: Giáo viên Toán lớp 3. Nhiệm vụ: Tạo 10 câu hỏi JSON.
+        CHỦ ĐỀ: ${randomTheme}. HỌC KỲ: ${config.semester}. KIẾN THỨC: ${topicLabels}.
+        CHI TIẾT: ${semesterDetail}. CẤU HÌNH: ${countsPrompt}.
         CẤM: ${excludedTopics}, Số thập phân.
 
-        QUY TẮC LOGIC VÀ ĐÁP ÁN (CỰC KỲ QUAN TRỌNG):
-        1. ĐỒNG NHẤT ĐƠN VỊ: Tất cả 4 đáp án phải có cùng một đơn vị đo. (Ví dụ: Nếu đáp án đúng là "3 m", các đáp án sai cũng phải là "m". CẤM trộn lẫn "300 cm" và "3 m").
-        2. KHÔNG TRÙNG LẶP GIÁ TRỊ: Tuyệt đối không đưa ra 2 đáp án có giá trị bằng nhau (Ví dụ: "1 giờ" và "60 phút" là trùng -> CẤM).
-        3. ĐỘ LỚN TƯƠNG ĐỒNG: Các đáp án sai phải có giá trị gần với đáp án đúng (Ví dụ: Đáp án là 1000, thì câu sai nên là 900, 1100... KHÔNG ĐƯỢC là 5 hay 10).
-        4. ĐẦY ĐỦ ĐƠN VỊ: Nếu đáp án đúng có đơn vị (ví dụ: "quyển vở"), thì TẤT CẢ đáp án sai cũng phải có chữ "quyển vở" đi kèm.
-        5. LUÔN TRẢ VỀ ĐỦ 4 OPTIONS: Không được thiếu.
+        YÊU CẦU QUAN TRỌNG:
+        1. KHÔNG tính toán đáp án cuối cùng. Chỉ đưa ra biểu thức hoặc giá trị thô.
+        2. NGÔN NGỮ: 100% TIẾNG VIỆT.
+        3. Dùng 'x' cho tìm x. Dùng dấu '...' cho điền dấu so sánh.
 
-        OUTPUT JSON FORMAT:
-        // Đảm bảo correctVal và options là STRING để chứa đơn vị
-        [{"text": "...", "options": ["10", "12", "14"], "correctVal": "12", "explanation": "...", "level": 2, "topic": "arithmetic"}]
+        OUTPUT JSON FORMAT (Mảng Object):
+        [
+            {
+                "text": "Điền dấu thích hợp: 120 + 30 ... 50 x 3", 
+                "logic_type": "comparison", 
+                "expression_left": "120 + 30", 
+                "expression_right": "50 * 3",
+                "explanation": "...", "level": 3, "topic": "arithmetic"
+            },
+            {
+                "text": "Mẹ có 50 quả cam, biếu bà 10 quả. Mẹ còn bao nhiêu?",
+                "logic_type": "calculation",
+                "expression_value": "50 - 10", 
+                "unit": "quả cam", 
+                "explanation": "...", "level": 2, "topic": "word_problems"
+            }
+        ]
       `;
       
       let questions = [];
@@ -389,87 +375,79 @@ const MathApp = () => {
           }
       } catch (e) {
           console.warn("Lỗi AI, chuyển sang chế độ Offline:", e);
-          
-          // --- LOGIC MỚI: DÙNG CÂU HỎI DỰ PHÒNG KHI MẤT MẠNG/LỖI ---
-          // 1. Trộn ngẫu nhiên danh sách dự phòng
           const shuffledBackup = [...BACKUP_QUESTIONS].sort(() => 0.5 - Math.random());
-          
-          // 2. Lấy 10 câu đầu tiên
           questions = shuffledBackup.slice(0, 10);
-
-          // 3. Nếu vẫn không có câu hỏi nào (file backup rỗng) thì mới báo lỗi
           if (!questions || questions.length === 0) {
              setAppError("Mạng yếu và không có dữ liệu offline. Vui lòng thử lại sau!");
              setIsGenerating(false);
              return;
           }
-          
-          // Thông báo nhỏ để biết đang dùng backup (có thể bỏ qua)
           console.log("⚠️ Đang sử dụng bộ câu hỏi dự phòng (Offline Mode)");
       }
       
+      // --- LOGIC XỬ LÝ: MÁY TÍNH TOÁN (ĐẢM BẢO CHÍNH XÁC 100%) ---
       const formattedQuiz = questions.map((q, idx) => {
-          let opts = q.options || [];
-          let correctVal = String(q.correctVal).trim();
+          let trueVal, options = [];
           
-          // Tự động kiểm tra và sửa đáp án cho các phép tính thuần túy
-          const verifiedResult = solveSimpleExpression(q.text);
-          if (verifiedResult !== null && String(verifiedResult) !== correctVal) {
-              console.log(`Tự động sửa câu ${idx}: AI tính ${correctVal}, Máy tính lại ${verifiedResult}`);
-              correctVal = String(verifiedResult);
-          }
-
-          const optsString = opts.map(o => String(o).trim());
-          if (!optsString.includes(correctVal)) {
-              // Nếu đáp án đúng không có trong options, thay thế đáp án đầu tiên bằng đáp án đúng
-              opts[0] = correctVal; 
-          }
-          
-            // --- BẮT ĐẦU ĐOẠN CODE SỬA ---
-          // Đảm bảo đủ 4 options và không bị trùng, sau đó xáo trộn
-          while(opts.length < 4) {
-              // 1. Lấy giá trị số từ đáp án đúng
-              const valMatch = correctVal.match(/(\d+)/);
-              const baseVal = valMatch ? parseInt(valMatch[0]) : 50; 
-              
-              // 2. Tạo số giả ngẫu nhiên xung quanh số đúng (+- 20%) để gây nhiễu
-              let fakeNum = baseVal + Math.floor(Math.random() * 20) - 10;
-              if (fakeNum < 0) fakeNum = 0; // Không để số âm
-              if (fakeNum === baseVal) fakeNum = baseVal + 5; // Tránh trùng đáp án đúng
-
-              // 3. Lấy phần đơn vị (text) từ đáp án đúng để gắn vào số giả
-              // Ví dụ: correctVal = "5 quả cam" -> unitText = "quả cam"
-              const unitText = correctVal.replace(/[\d.,]+/g, '').trim(); 
-              
-              // 4. Ghép số giả + đơn vị
-              const fakeOption = unitText ? `${fakeNum} ${unitText}` : String(fakeNum);
-              
-              // 5. Chỉ thêm vào nếu chưa có trong danh sách
-              if (!opts.includes(fakeOption)) {
-                  opts.push(fakeOption);
-              }
-          }
-
-          // Lọc trùng và xáo trộn vị trí
-          opts = [...new Set(opts.map(o => String(o).trim()))].sort(() => Math.random() - 0.5);
-          
-          const labels = ['A', 'B', 'C', 'D'];
-          let correctIdx = opts.findIndex(o => o === correctVal);
-          // --- KẾT THÚC ĐOẠN CODE SỬA ---
-          // Nếu sau khi shuffle mà đáp án đúng bị mất (vì lý do nào đó), đặt lại vào vị trí ngẫu nhiên
-          if (correctIdx === -1) { 
-            correctIdx = Math.floor(Math.random() * 4);
-            opts[correctIdx] = correctVal; 
+          if (q.logic_type === 'comparison') {
+                // Xử lý bài toán so sánh (< > =)
+                const resultSign = compareExpressions(q.expression_left, q.expression_right); 
+                trueVal = resultSign || "="; 
+                options = [">", "<", "="];
+                q.text = q.text.replace("...", "___"); 
           } 
+          else {
+                // Xử lý bài toán tính toán / toán đố (Mặc định)
+                // Ưu tiên dùng expression_value, nếu không có thì fallback thử parse từ text (cho backup cũ)
+                const expr = q.expression_value || q.text; 
+                const numVal = evaluateMathLogic(expr); 
+                
+                // Nếu tính ra null (lỗi), gán giá trị mặc định an toàn để không crash
+                const safeNumVal = numVal !== null ? numVal : 0;
+                trueVal = String(safeNumVal);
+                
+                // Code TỰ SINH ra 3 đáp án nhiễu (Distractors)
+                const d1 = safeNumVal + Math.floor(Math.random() * 5) + 1; 
+                const d2 = Math.max(0, safeNumVal - Math.floor(Math.random() * 5) - 1); 
+                const d3 = safeNumVal + 10; 
+                
+                // Tạo mảng options unique
+                const rawOptions = [safeNumVal, d1, d2, d3];
+                const uniqueOptions = [...new Set(rawOptions)];
+                // Nếu sau khi lọc trùng bị thiếu, bù thêm số ngẫu nhiên
+                while(uniqueOptions.length < 4) {
+                    uniqueOptions.push(safeNumVal + uniqueOptions.length + 5);
+                }
+
+                options = uniqueOptions.map(String);
+                
+                // Thêm đơn vị vào nếu có
+                if (q.unit) {
+                    trueVal = `${trueVal} ${q.unit}`;
+                    options = options.map(o => `${o} ${q.unit}`);
+                }
+          }
+
+          // Xáo trộn vị trí đáp án
+          options = options.sort(() => Math.random() - 0.5);
           
+          // Tìm lại index của đáp án đúng
+          const labels = ['A', 'B', 'C', 'D'];
+          // Fallback: Nếu không tìm thấy trueVal (hiếm), mặc định chọn A
+          let correctIdx = options.findIndex(o => o === trueVal);
+          if (correctIdx === -1) {
+              options[0] = trueVal;
+              correctIdx = 0;
+          }
+
           return { 
             ...q, 
             id: idx, 
-            options: opts, 
+            options: options, 
             correctOption: labels[correctIdx], 
-            correctVal: correctVal, 
-            level: q.level || 3, // Default level
-            topic: TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic' // Chuẩn hóa topic
+            correctVal: trueVal, 
+            level: q.level || 3, 
+            topic: TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic'
           };
       });
       
@@ -485,7 +463,7 @@ const MathApp = () => {
       const currentQ = quizData[currentQIndex];
       const isCorrect = optLabel === currentQ.correctOption;
       let reward = 0;
-      if (isCorrect) { reward = REWARD_PER_LEVEL[currentQ.level] || 300; setSessionScore(prev => prev + reward); }
+      if (isCorrect) { reward = REWARD_PER_LEVEL[currentQ.level] || 150; setSessionScore(prev => prev + reward); }
       
       setHistory(prev => [...prev, { ...currentQ, userAnswer: optLabel, isCorrect, reward, timeTaken }]);
       setIsSubmitted(true);
@@ -501,7 +479,7 @@ const MathApp = () => {
       setPiggyBank(newPiggyBank);
       setGameState('result');
       
-      if (!appUser || appUser.isAnon) return; // Không lưu dữ liệu cho tài khoản khách
+      if (!appUser || appUser.isAnon) return;
 
       try {
           const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'math_user_data', appUser.uid);
@@ -511,7 +489,6 @@ const MathApp = () => {
           let newStats = userData.stats || {};
           let newLogs = userData.logs || [];
           
-          // Cập nhật Stats
           if (!newStats[currentProfile.id]) newStats[currentProfile.id] = { total_questions: 0, total_correct: 0, topics: {} };
           let pStats = newStats[currentProfile.id];
           
@@ -520,14 +497,13 @@ const MathApp = () => {
               if (q.isCorrect) pStats.total_correct = (pStats.total_correct || 0) + 1;
               if (!pStats.topics) pStats.topics = {};
               
-              const topicId = TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic'; // Chuẩn hóa topic
+              const topicId = TOPIC_TRANSLATIONS[String(q.topic).toLowerCase().trim()] || 'arithmetic';
               if (!pStats.topics[topicId]) pStats.topics[topicId] = { total: 0, correct: 0 };
               
               pStats.topics[topicId].total += 1;
               if (q.isCorrect) pStats.topics[topicId].correct += 1;
           });
           
-          // Cập nhật Logs
           const logEntry = {
               id: crypto.randomUUID(), 
               profileId: currentProfile.id,
@@ -540,7 +516,7 @@ const MathApp = () => {
                   topic: h.topic,
                   level: h.level,
                   timeTaken: h.timeTaken
-              })) // Chỉ lưu thông tin cơ bản
+              }))
           };
           newLogs.push(logEntry);
           
@@ -555,7 +531,6 @@ const MathApp = () => {
 
   const redeemCash = (item) => {
       if (piggyBank >= item.value) {
-          // Dùng custom modal thay cho window.confirm/alert
           if (window.confirm(`Xác nhận đổi quà: ${item.name}? Bạn sẽ mất ${fmt(item.value)}đ.`)) {
               const newBalance = piggyBank - item.value;
               const newHistory = [...redemptionHistory, { id: item.id, date: Date.now(), value: item.value, name: item.name }];
@@ -583,14 +558,13 @@ const MathApp = () => {
           case 'home':
               return <HomeScreen piggyBank={piggyBank} setGameState={setGameState} currentProfile={currentProfile} isGenerating={isGenerating} handleStartQuiz={handleStartQuiz} config={config} setCurrentProfile={setCurrentProfile} appError={appError} setAppError={setAppError} isAuthReady={isAuthReady} />; 
           case 'playing':
-              // Cần truyền đủ props cho QuizScreen
               return <QuizScreen quizData={quizData} currentQIndex={currentQIndex} setGameState={setGameState} sessionScore={sessionScore} selectedOption={selectedOption} isSubmitted={isSubmitted} handleSelectOption={handleSelectOption} handleNextQuestion={handleNextQuestion} />; 
           case 'result':
               return <ResultScreen history={history} quizData={quizData} sessionScore={sessionScore} setGameState={setGameState} currentProfile={currentProfile} />; 
           case 'report':
               return <ReportScreen currentProfile={currentProfile} appUser={appUser} setGameState={setGameState} />; 
           case 'shop':
-              return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} />; 
+              return <ShopScreen piggyBank={piggyBank} setGameState={setGameState} redeemCash={redeemCash} redemptionHistory={redemptionHistory} appUser={appUser} />; 
           case 'config':
               return <ConfigScreen config={config} setConfig={setConfig} saveConfig={saveConfig} setGameState={setGameState} onLogout={handleAppLogout} appUser={appUser} />; 
           default:
@@ -602,7 +576,7 @@ const MathApp = () => {
     <>
     <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800;900&display=swap'); body { font-family: 'Nunito', sans-serif; } .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .animation-fade-in { animation: fadeIn 0.3s ease-out forwards; } .animate-spin-once { animation: spin 1s linear 1; } @keyframes spin { 100% { transform: rotate(360deg); } } @keyframes shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-5px); } 40%, 80% { transform: translateX(5px); } } .animate-shake { animation: shake 0.5s ease-in-out; }`}</style>
     <div className="fixed inset-0 bg-slate-100 flex items-center justify-center select-none overflow-hidden">
-      <div className="w-full h-full max-w-md bg-white shadow-2xl overflow-hidden relative flex flex-col sm:rounded-[2.5rem] sm:h-[95vh] sm:border-[8px] sm:border-slate-200 relative">
+      <div className="w-full h-full max-w-md bg-white shadow-2xl overflow-hidden relative flex flex-col sm:rounded-[2.5rem] sm:h-[95vh] sm:border-[8px] sm:border-slate-200">
         <React.Suspense fallback={<div className="flex items-center justify-center h-full"><Loader className="animate-spin text-indigo-500"/></div>}>
             {getScreenComponent()}
         </React.Suspense>

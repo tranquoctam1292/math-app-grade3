@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Mail, Key, UserPlus, LogIn, AlertTriangle, Loader, ShieldCheck, UserCheck } from 'lucide-react';
+import { Mail, Key, UserPlus, LogIn, AlertTriangle, Loader, ShieldCheck, UserCheck, XCircle } from 'lucide-react';
 import { ClayButton } from '../lib/helpers.jsx';
 import { getDeviceId, encodeEmail } from '../lib/utils.js';
-import { signInAnonymously } from 'firebase/auth';
+import { sendPasswordResetEmail, signInAnonymously } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth, appId } from '../lib/firebase'; // Import from App.jsx
 
@@ -11,6 +11,10 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isResetOpen, setIsResetOpen] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
+    const [resetMsg, setResetMsg] = useState(null);
 
     const handleAuth = async () => {
         if (!email || !password) { setErrorMsg("Vui lòng nhập đầy đủ thông tin"); return; }
@@ -85,6 +89,33 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
         }
     };
 
+    const handleResetPassword = async () => {
+        const targetEmail = resetEmail?.toLowerCase().trim();
+        if (!targetEmail) {
+            setResetMsg({ type: 'error', text: 'Vui lòng nhập email để nhận liên kết khôi phục.' });
+            return;
+        }
+
+        setResetLoading(true);
+        setResetMsg(null);
+        try {
+            await sendPasswordResetEmail(auth, targetEmail);
+            setResetMsg({ type: 'success', text: 'Đã gửi hướng dẫn đặt lại mật khẩu. Kiểm tra hộp thư nhé!' });
+        } catch (err) {
+            console.error(err);
+            setResetMsg({ type: 'error', text: `Không thể gửi email: ${err.message}` });
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
+    const closeResetModal = () => {
+        setIsResetOpen(false);
+        setResetEmail('');
+        setResetMsg(null);
+        setResetLoading(false);
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-50 p-6 justify-center">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-xl border border-slate-100 text-center">
@@ -114,6 +145,20 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                     {isRegister ? 'Đăng Ký Ngay' : 'Đăng Nhập'}
                 </ClayButton>
 
+                {!isRegister && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsResetOpen(true);
+                            setResetEmail(email);
+                            setResetMsg(null);
+                        }}
+                        className="text-sm font-bold text-rose-500 hover:underline mb-4"
+                    >
+                        Quên mật khẩu?
+                    </button>
+                )}
+
                 <button onClick={() => { setIsRegister(!isRegister); setErrorMsg(null); }} className="text-sm font-bold text-indigo-500 hover:underline mb-4">
                     {isRegister ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký mới'}
                 </button>
@@ -130,6 +175,51 @@ const AuthScreen = ({ onLoginSuccess, errorMsg, setErrorMsg }) => {
                     <ShieldCheck size={14}/> Bảo mật tối đa • Sync 3 thiết bị
                 </div>
             </div>
+
+            {isResetOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-white w-11/12 max-w-sm rounded-3xl p-6 shadow-2xl border border-slate-100 relative">
+                        <button
+                            type="button"
+                            onClick={closeResetModal}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-rose-500"
+                        >
+                            <XCircle size={20}/>
+                        </button>
+                        <h2 className="text-xl font-black text-slate-800 mb-2">Quên mật khẩu?</h2>
+                        <p className="text-sm text-slate-500 mb-4">
+                            Nhập email phụ huynh để nhận liên kết đặt lại mật khẩu nhé.
+                        </p>
+                        <div className="relative mb-4">
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                            <input
+                                type="email"
+                                value={resetEmail}
+                                onChange={e => setResetEmail(e.target.value)}
+                                placeholder="Email phụ huynh"
+                                className="w-full h-12 pl-12 pr-4 rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white focus:border-rose-400 outline-none font-semibold text-slate-700 transition-all"
+                            />
+                        </div>
+                        {resetMsg && (
+                            <div
+                                className={`mb-3 text-xs font-bold p-3 rounded-2xl flex items-center gap-2 ${resetMsg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}
+                            >
+                                {resetMsg.type === 'success' ? <ShieldCheck size={16}/> : <AlertTriangle size={16}/>}
+                                {resetMsg.text}
+                            </div>
+                        )}
+                        <ClayButton
+                            onClick={handleResetPassword}
+                            disabled={resetLoading}
+                            colorClass="bg-rose-500 text-white"
+                            className="w-full h-12 flex items-center justify-center gap-2 font-black text-sm"
+                        >
+                            {resetLoading ? <Loader className="animate-spin"/> : <Mail size={18}/>}
+                            Gửi hướng dẫn mới
+                        </ClayButton>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

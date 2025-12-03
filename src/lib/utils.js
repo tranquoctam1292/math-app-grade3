@@ -13,7 +13,7 @@ export const fmt = (num) => {
     return String(parseInt(num)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
-export const solveSimpleExpression = (text) => {
+export const evaluateMathLogic = (text) => {
     try {
         // 1. Chuẩn hóa phép toán
         const clean = text.toLowerCase()
@@ -39,6 +39,19 @@ export const solveSimpleExpression = (text) => {
         // Bỏ biến (e) đi vì không dùng đến để tránh lỗi ESLint
         return null;
     }
+};
+
+export const compareExpressions = (expr1, expr2) => {
+    const val1 = evaluateMathLogic(expr1);
+    const val2 = evaluateMathLogic(expr2);
+
+    if (val1 === null || val2 === null) {
+        return '='; 
+    }
+
+    if (val1 > val2) return '>';
+    if (val1 < val2) return '<';
+    return '=';
 };
 
 export const encodeEmail = (email) => {
