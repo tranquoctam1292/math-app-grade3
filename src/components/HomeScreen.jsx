@@ -1,11 +1,11 @@
 import React from 'react';
-import { PiggyBank, Sparkles, WifiOff, Play, Loader, BarChart3, ShoppingBag, Settings } from 'lucide-react';
+import { PiggyBank, Sparkles, WifiOff, Play, Loader, BarChart3, ShoppingBag, Settings, UserCog } from 'lucide-react'; // Thêm UserCog
 import { ClayButton } from '../lib/helpers.jsx';
 import { fmt } from '../lib/utils.js';
 
-
-const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, handleStartQuiz, config, setCurrentProfile, appError, setAppError }) => (
+const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, handleStartQuiz, config, setCurrentProfile, appError, setAppError, onOpenConfig }) => (
     <div className="flex flex-col h-full bg-slate-50 p-6">
+        {/* Header Profile Info */}
         <div className="flex justify-between items-center mb-6 pt-4">
             <button onClick={() => { setGameState('profile_select'); setCurrentProfile(null); }} className="flex items-center gap-3 bg-white p-2 pr-4 rounded-full shadow-sm border border-slate-100 active:scale-95 transition-transform">
                 <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-2xl">{currentProfile?.avatar || '❓'}</div>
@@ -24,11 +24,27 @@ const HomeScreen = ({ piggyBank, setGameState, currentProfile, isGenerating, han
             <div className="mb-6 bg-indigo-50 text-indigo-600 p-4 rounded-3xl border border-indigo-100 flex items-center gap-3"><Sparkles className="text-indigo-400" size={24}/><p className="font-bold text-sm">Hôm nay {currentProfile?.name} muốn học gì nào?</p></div>
         )}
 
-        <div className="grid grid-cols-3 gap-3 mb-8">
-            <ClayButton onClick={() => setGameState('report')} className="h-24 flex flex-col items-center justify-center gap-2 bg-white border-slate-100 !rounded-3xl"><div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><BarChart3 size={20}/></div><span className="text-xs font-black text-slate-600">Học Bạ</span></ClayButton>
-            <ClayButton onClick={() => setGameState('shop')} className="h-24 flex flex-col items-center justify-center gap-2 bg-white border-slate-100 !rounded-3xl"><div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center"><ShoppingBag size={20}/></div><span className="text-xs font-black text-slate-600">Cửa Hàng</span></ClayButton>
-            <ClayButton onClick={() => setGameState('config')} className="h-24 flex flex-col items-center justify-center gap-2 bg-white border-slate-100 !rounded-3xl"><div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Settings size={20}/></div><span className="text-xs font-black text-slate-600">Cấu Hình</span></ClayButton>
+        {/* Updated Grid Menu: 2 hàng 2 cột cho cân đối hoặc 4 nút */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+            <ClayButton onClick={() => setGameState('report')} className="h-20 flex flex-row items-center px-4 gap-3 bg-white border-slate-100 !rounded-2xl">
+                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center"><BarChart3 size={20}/></div>
+                <span className="text-sm font-black text-slate-600">Học Bạ</span>
+            </ClayButton>
+            <ClayButton onClick={() => setGameState('shop')} className="h-20 flex flex-row items-center px-4 gap-3 bg-white border-slate-100 !rounded-2xl">
+                <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center"><ShoppingBag size={20}/></div>
+                <span className="text-sm font-black text-slate-600">Cửa Hàng</span>
+            </ClayButton>
+            <ClayButton onClick={onOpenConfig} className="h-20 flex flex-row items-center px-4 gap-3 bg-white border-slate-100 !rounded-2xl">
+                <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><Settings size={20}/></div>
+                <span className="text-sm font-black text-slate-600">Cấu Hình</span>
+            </ClayButton>
+            {/* Nút mới cho Tài khoản phụ huynh */}
+            <ClayButton onClick={() => setGameState('user_profile')} className="h-20 flex flex-row items-center px-4 gap-3 bg-white border-slate-100 !rounded-2xl">
+                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center"><UserCog size={20}/></div>
+                <span className="text-sm font-black text-slate-600">Tài Khoản</span>
+            </ClayButton>
         </div>
+
         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6">
             <div><h1 className="text-4xl font-black text-indigo-600 mb-2 font-nunito tracking-tight">Toán Lớp 3</h1><p className="text-slate-400 font-medium">Đề bài được "thửa riêng" cho con!</p></div>
             <div className="w-full space-y-4">

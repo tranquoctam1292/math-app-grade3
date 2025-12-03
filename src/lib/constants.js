@@ -1,5 +1,5 @@
 import { 
-  Calculator, Sigma, Target, Brain, BookOpen, Banknote, Shapes, Hash, BarChart3, HelpCircle 
+    Calculator, Sigma, Target, Brain, BookOpen, Banknote, Shapes, Hash, BarChart3, HelpCircle 
 } from 'lucide-react';
 
 export const TOPICS_LIST = [
@@ -45,15 +45,26 @@ export const REWARD_PER_LEVEL = { 2: 100, 3: 150, 4: 200 };
 export const DIFFICULTY_MIX = {
     easy: { 2: 7, 3: 3, 4: 0 },    
     medium: { 2: 4, 3: 4, 4: 2 }, 
-    hard: { 2: 2, 3: 4, 4: 4 }    
+    hard: { 2: 2, 3: 4, 4: 4 }     
 };
 
 export const SHOP_ITEMS = [
-  { id: 'cash_10k', name: '10.000đ Tiền mặt', value: 10000, color: 'bg-green-100 text-green-700 border-green-200' },
-  { id: 'cash_20k', name: '20.000đ Tiền mặt', value: 20000, color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { id: 'cash_30k', name: '30.000đ Tiền mặt', value: 30000, color: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { id: 'cash_40k', name: '40.000đ Tiền mặt', value: 40000, color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { id: 'cash_50k', name: '50.000đ Tiền mặt', value: 50000, color: 'bg-red-100 text-red-700 border-red-200' },
+    { id: 'cash_10k', name: '10.000đ Tiền mặt', value: 10000, color: 'bg-green-100 text-green-700 border-green-200' },
+    { id: 'cash_20k', name: '20.000đ Tiền mặt', value: 20000, color: 'bg-blue-100 text-blue-700 border-blue-200' },
+    { id: 'cash_30k', name: '30.000đ Tiền mặt', value: 30000, color: 'bg-purple-100 text-purple-700 border-purple-200' },
+    { id: 'cash_40k', name: '40.000đ Tiền mặt', value: 40000, color: 'bg-orange-100 text-orange-700 border-orange-200' },
+    { id: 'cash_50k', name: '50.000đ Tiền mặt', value: 50000, color: 'bg-red-100 text-red-700 border-red-200' },
 ];
 
 export const AVATARS = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮'];
+export const REDEMPTION_STATUS = {
+    PENDING: 'PENDING',
+    APPROVED: 'APPROVED',
+    REJECTED: 'REJECTED'
+};
+
+export const DEFAULT_PARENT_SETTINGS = {
+    pinHash: null,
+    lastUpdated: null,
+    unlockedSeconds: 300
+};

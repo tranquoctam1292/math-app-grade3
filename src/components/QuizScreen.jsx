@@ -1,26 +1,156 @@
 import React from 'react';
-import { ArrowLeft, CheckCircle, XCircle, PiggyBank, Smile, Frown, ArrowRight } from 'lucide-react';
+import { ArrowLeft, PiggyBank, Smile, Frown, ArrowRight } from 'lucide-react';
 import { ClayButton, MathText } from '../lib/helpers';
 import { REWARD_PER_LEVEL } from '../lib/constants';
-import { fmt } from '../lib/utils';
+// ✅ CẬP NHẬT IMPORT: Thêm normalizeVal
+import { fmt, normalizeVal } from '../lib/utils';
+import parse from 'html-react-parser';
 
-const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion }) => {
+// Import các dạng bài tập mới
+import QuizMCQ from './quiz_types/QuizMCQ';
+import QuizFillBlank from './quiz_types/QuizFillBlank';
+import QuizComparison from './quiz_types/QuizComparison';
+import QuizSorting from './quiz_types/QuizSorting';
+import QuizMatching from './quiz_types/QuizMatching';
+
+const ALLOWED_SVG_TAGS = new Set(['rect', 'circle', 'path', 'line', 'polygon', 'polyline', 'text']);
+const ALLOWED_ATTRS = new Set([
+    'x', 'y', 'x1', 'y1', 'x2', 'y2',
+    'cx', 'cy', 'r',
+    'width', 'height', 'rx', 'ry',
+    'points', 'd',
+    'stroke', 'stroke-width', 'strokeLinecap', 'strokeLinejoin', 'strokeDasharray',
+    'fill', 'opacity',
+    'font-size', 'fontWeight', 'text-anchor',
+    'transform'
+]);
+
+const renderSafeSvgContent = (svgContent) => {
+    if (!svgContent || typeof svgContent !== 'string') return null;
+
+    return parse(svgContent, {
+        replace: (domNode) => {
+            if (domNode.type === 'text') {
+                return domNode.data;
+            }
+            if (domNode.type !== 'tag') return null;
+
+            const tag = domNode.name.toLowerCase();
+            if (!ALLOWED_SVG_TAGS.has(tag)) return null;
+
+            const safeProps = {};
+            const attribs = domNode.attribs || {};
+
+            Object.keys(attribs).forEach((key) => {
+                const lowerKey = key.toLowerCase();
+                // Loại bỏ mọi on* handler, href, xlink, style inline
+                if (lowerKey.startsWith('on')) return;
+                if (lowerKey === 'href' || lowerKey === 'xlink:href') return;
+                if (lowerKey === 'style') return;
+                if (!ALLOWED_ATTRS.has(lowerKey)) return;
+                safeProps[lowerKey] = attribs[key];
+            });
+
+            return React.createElement(tag, safeProps, domNode.children?.map((child) => (
+                // Gọi lại parser trên children để áp dụng cùng logic
+                renderSafeSvgContent(parse(child.data || '', {})) || null
+            )));
+        }
+    });
+};
+
+const buildGeometrySvg = (question) => {
+    if (question.topic !== 'geometry') return question.svgContent || null;
+    if (question.svgContent && question.svgContent.trim().length > 0) return question.svgContent;
+    const text = String(question.text || '').toLowerCase();
+    const nums = (question.text || '').match(/\d+/g)?.map(Number) || [];
+    if (text.includes('tam giác')) {
+        return `<polygon points="60,150 150,40 240,150" stroke="#4F46E5" stroke-width="4" fill="#E0E7FF" />
+        <line x1="150" y1="40" x2="150" y2="150" stroke="#F97316" stroke-dasharray="6,4" stroke-width="2" />
+        <text x="150" y="30" text-anchor="middle" font-size="14" fill="#374151" font-weight="bold">Tam giác</text>`;
+    }
+    const width = Math.min(220, (nums[0] || 10) * 10);
+    const height = Math.min(120, (nums[1] || nums[0] || 5) * 8);
+    return `<rect x="${(300 - width) / 2}" y="${(200 - height) / 2}" width="${width}" height="${height}" rx="12" stroke="#4F46E5" stroke-width="4" fill="#E0E7FF" />
+        <text x="150" y="${(200 - height) / 2 - 10}" text-anchor="middle" font-size="14" fill="#374151" font-weight="bold">${nums[0] || 10} cm</text>
+        <text x="${(300 + width) / 2 + 10}" y="110" font-size="14" fill="#374151" font-weight="bold" transform="rotate(-90 ${(300 + width) / 2 + 10},110)">${nums[1] || nums[0] || 5} cm</text>`;
+};
+
+const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selectedOption, isSubmitted, handleSelectOption, handleNextQuestion, attemptCount, resetCurrentQuestion }) => {
     const q = quizData[currentQIndex];
+    const geometrySvg = buildGeometrySvg(q);
     const progress = ((currentQIndex + 1) / quizData.length) * 100;
     
     if (!q) return <div className="p-6 text-center">Đang tải...</div>;
 
+    // Kiểm tra xem có phải True/False (comparison) không
+    const isTrueFalseType = q.type === 'comparison';
+
+    // ✅ SỬA ĐỔI: Logic kiểm tra đúng sai nhất quán với MathApp.js
+    let isCorrect = false;
+    if (isSubmitted) {
+        if (q.type === 'sorting') {
+            // Sorting: selectedOption đang là JSON string (do MathApp convert) -> Parse lại để so sánh
+            let userArr = [];
+            try { 
+                // Nếu selectedOption là string thì parse, nếu là array sẵn thì giữ nguyên
+                userArr = typeof selectedOption === 'string' ? JSON.parse(selectedOption) : selectedOption;
+            } catch (e) {
+                console.warn("Lỗi parse selectedOption:", e);
+            }
+            
+            const correctArr = q.correctOrder || [];
+            
+            // So sánh từng phần tử bằng normalizeVal
+            isCorrect = Array.isArray(userArr) && 
+                        userArr.length === correctArr.length && 
+                        userArr.every((val, i) => normalizeVal(val) === normalizeVal(correctArr[i]));
+
+        } else if (q.type === 'matching') {
+            // Matching: Đúng khi giá trị là true hoặc chuỗi "true"
+            isCorrect = selectedOption === true || String(selectedOption) === "true";
+
+        } else {
+            // MCQ & Comparison & FillBlank
+            // So sánh lỏng bằng normalizeVal
+            isCorrect = normalizeVal(selectedOption) === normalizeVal(q.correctVal);
+        }
+    }
+
+    const isLastQuestion = currentQIndex === quizData.length - 1;
+
+    // Helper render body
+    const renderQuizBody = () => {
+        // Thêm prop key={currentQIndex} vào TẤT CẢ các component bên dưới
+        switch (q.type) {
+            case 'fill_blank':
+                return <QuizFillBlank key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} userAnswer={selectedOption} />;
+            case 'comparison':
+                return <QuizComparison key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} userAnswer={selectedOption} />;
+            case 'sorting':
+                return <QuizSorting key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} />;
+            case 'matching':
+                return <QuizMatching key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} />;
+            case 'mcq':
+            default:
+                return <QuizMCQ key={currentQIndex} question={q} onAnswer={handleSelectOption} isSubmitted={isSubmitted} userAnswer={selectedOption} />;
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-50 relative overflow-hidden">
             {/* --- HEADER STICKY --- */}
-            <div className="px-4 pt-6 pb-2 bg-white sticky top-0 z-10 shadow-sm">
+            <div className="px-4 pt-6 pb-2 bg-white sticky top-0 z-10 shadow-sm shrink-0">
                 <div className="flex justify-between items-center mb-2">
                     <ClayButton onClick={() => setGameState('home')} className="w-10 h-10 flex items-center justify-center !rounded-full !p-0">
                         <ArrowLeft size={20} className="text-slate-500"/>
                     </ClayButton>
                     <div className="flex flex-col items-center">
                         <span className="font-black text-slate-700 text-lg">Câu {currentQIndex + 1}/{quizData.length}</span>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Mức {q.level} (+{REWARD_PER_LEVEL[q.level] || 0}đ)</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 uppercase tracking-wider">{q.type || 'MCQ'}</span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Mức {q.level} (+{REWARD_PER_LEVEL[q.level] || 0}đ)</span>
+                        </div>
                     </div>
                     <div className="flex items-center gap-1 bg-pink-100 px-2 py-1 rounded-lg text-pink-700 font-bold text-xs">
                         <PiggyBank size={14}/> +{fmt(sessionScore)}đ
@@ -32,76 +162,223 @@ const QuizScreen = ({ quizData, currentQIndex, setGameState, sessionScore, selec
             </div>
 
             {/* --- SCROLLABLE CONTENT --- */}
-            <div className="flex-1 overflow-y-auto p-4 pb-32 no-scrollbar">
-                {/* Question Box */}
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-6">
-                    <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed">
-                        <MathText text={q.text} />
-                    </div>
-                </div>
-
-                {/* Options List */}
-                <div className="space-y-3">
-                    {q.options.map((opt, idx) => {
-                        const label = ['A', 'B', 'C', 'D'][idx];
-                        let stateClass = "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50"; 
-                        let icon = <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm border-2 bg-white border-current`}>{label}</div>;
-
-                        if (isSubmitted) {
-                            if (label === q.correctOption) {
-                                // ĐÁP ÁN ĐÚNG
-                                stateClass = "bg-green-100 border-green-600 text-green-800 ring-4 ring-green-200 scale-[1.02] shadow-xl";
-                                icon = <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-green-600 text-white border-green-700"><CheckCircle size={18}/></div>;
-                            } else if (selectedOption === label) {
-                                // ĐÁP ÁN SAI (ĐÃ CHỌN)
-                                stateClass = "bg-red-100 border-red-600 text-red-800 ring-4 ring-red-200 animate-shake";
-                                icon = <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-red-600 text-white border-red-700"><XCircle size={18}/></div>;
-                            } else {
-                                // CÁC ĐÁP ÁN KHÁC
-                                stateClass = "bg-slate-50 border-slate-100 text-slate-300 opacity-40 grayscale";
-                            }
-                        } else if (selectedOption === label) {
-                            // ĐANG CHỌN (CHƯA SUBMIT)
-                            stateClass = "bg-blue-50 border-blue-500 text-blue-700";
-                        }
-
-                        return (
-                            <ClayButton 
-                                key={idx} 
-                                onClick={() => handleSelectOption(label)} 
-                                disabled={isSubmitted} 
-                                className={`w-full min-h-[72px] flex items-center px-4 gap-4 ${stateClass} border-2 transition-all duration-200`}
-                            >
-                                {icon}
-                                <span className="text-xl font-bold flex-1 text-left"><MathText text={opt} /></span>
-                                {isSubmitted && label === q.correctOption && <div className="text-green-700 font-black text-sm bg-white px-2 py-1 rounded-lg border border-green-300">+{REWARD_PER_LEVEL[q.level]}đ</div>}
-                            </ClayButton>
-                        )
-                    })}
-                </div>
-
-                {/* Feedback Section */}
-                {isSubmitted && (
-                    <div className={`mt-6 p-4 rounded-2xl border-l-4 animation-fade-in ${selectedOption === q.correctOption ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
-                        <h3 className={`font-black text-lg mb-1 flex items-center gap-2 ${selectedOption === q.correctOption ? 'text-green-700' : 'text-red-700'}`}>
-                            {selectedOption === q.correctOption ? <><Smile className="text-green-600"/> Chính xác! Xuất sắc!</> : <><Frown className="text-red-600"/> Chưa đúng rồi!</>}
-                        </h3>
-                        {selectedOption !== q.correctOption && (
-                            <div className="text-sm font-bold text-slate-500 mb-2">Đáp án đúng là <span className="text-green-700 bg-green-100 px-2 rounded-md border border-green-200 mx-1">{q.correctOption}</span> nhé!</div>
+            <div className="flex-1 overflow-y-auto p-4 pb-24 no-scrollbar flex flex-col">
+                {/* Question Box (Chỉ hiện text ở đây nếu ko phải FillBlank - vì FillBlank đã tích hợp text bên trong) */}
+                {q.type !== 'fill_blank' && (
+                    <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 mb-6 shrink-0">
+                        {/* Với comparison, cần parse và hiển thị biểu thức rõ ràng hơn */}
+                        {q.type === 'comparison' ? (
+                            <div className="text-center">
+                                <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed mb-4">
+                                    {q.text.includes('So sánh') || q.text.includes('so sánh') 
+                                        ? 'So sánh hai biểu thức sau:'
+                                        : q.text.includes('Điền dấu') || q.text.includes('điền dấu')
+                                        ? 'Điền dấu thích hợp:'
+                                        : 'So sánh:'
+                                    }
+                                </div>
+                                {/* Parse và hiển thị biểu thức từ text hoặc explanation */}
+                                {(() => {
+                                    let expressionPart = '';
+                                    
+                                    // 1. Thử tìm biểu thức trong text (sau dấu hai chấm)
+                                    const textParts = q.text.split(/[:：]/);
+                                    if (textParts.length > 1) {
+                                        const afterColon = textParts.slice(1).join(':').trim();
+                                        if (afterColon && afterColon.length > 2) {
+                                            expressionPart = afterColon;
+                                        }
+                                    }
+                                    
+                                    // 2. Nếu không tìm thấy, thử tìm pattern với dấu ... hoặc ___
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        const match = q.text.match(/([^:]+(?:\.\.\.|___|…|với)[^:]+)/);
+                                        if (match && match[1].trim().length > 2) {
+                                            expressionPart = match[1].trim();
+                                        }
+                                    }
+                                    
+                                    // 3. Nếu vẫn không tìm thấy, thử parse từ explanation
+                                    if ((!expressionPart || expressionPart.length < 3) && q.explanation) {
+                                        // Pattern 1: "125 + 75 = 200; 250 - 40 = 210. Vì 200 < 210 nên 125 + 75 < 250 - 40"
+                                        const expMatch1 = q.explanation.match(/(\d+\s*[+\-×x*÷/]\s*\d+)\s*=\s*\d+\s*[;,]?\s*(\d+\s*[+\-×x*÷/]\s*\d+)\s*=\s*\d+/);
+                                        if (expMatch1) {
+                                            expressionPart = `${expMatch1[1].trim()} ... ${expMatch1[2].trim()}`;
+                                        } else {
+                                            // Pattern 2: "125 + 75 < 250 - 40" (trực tiếp trong explanation)
+                                            const expMatch2 = q.explanation.match(/(\d+\s*[+\-×x*÷/]\s*\d+)\s*(<|>|=)\s*(\d+\s*[+\-×x*÷/]\s*\d+)/);
+                                            if (expMatch2) {
+                                                expressionPart = `${expMatch2[1].trim()} ... ${expMatch2[3].trim()}`;
+                                            } else {
+                                                // Pattern 3: Tìm bất kỳ biểu thức nào có dấu toán học
+                                                const expMatch3 = q.explanation.match(/([0-9]+\s*[+\-×x*÷/]\s*[0-9]+)\s*[^0-9+\-×x*÷/]*\s*([0-9]+\s*[+\-×x*÷/]\s*[0-9]+)/);
+                                                if (expMatch3) {
+                                                    expressionPart = `${expMatch3[1].trim()} ... ${expMatch3[2].trim()}`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // 4. Nếu vẫn không tìm thấy, loại bỏ phần câu dẫn và dùng phần còn lại của text
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        const cleaned = q.text
+                                            .replace(/^(So sánh|Điền dấu|so sánh|điền dấu).*?[:：]\s*/i, '')
+                                            .replace(/^(hai biểu thức sau|thích hợp)\s*/i, '')
+                                            .trim();
+                                        if (cleaned && cleaned.length > 2 && cleaned !== q.text) {
+                                            expressionPart = cleaned;
+                                        }
+                                    }
+                                    
+                                    // 5. Nếu vẫn rỗng, hiển thị text gốc (có thể text đã chứa biểu thức)
+                                    if (!expressionPart || expressionPart.length < 3) {
+                                        expressionPart = q.text;
+                                    }
+                                    
+                                    // Debug: Log để kiểm tra (chỉ trong dev mode)
+                                    if (import.meta.env.DEV) {
+                                        console.log('Comparison question:', {
+                                            text: q.text,
+                                            explanation: q.explanation,
+                                            parsed: expressionPart
+                                        });
+                                    }
+                                    
+                                    return (
+                                        <div className="bg-indigo-50 p-4 rounded-2xl border-2 border-indigo-200">
+                                            <div className="text-2xl sm:text-3xl font-black text-indigo-700 leading-relaxed">
+                                                <MathText text={expressionPart} />
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="text-lg sm:text-xl text-slate-800 font-bold leading-relaxed text-center">
+                                <MathText text={q.text} />
+                            </div>
                         )}
-                        <div className="bg-white/60 p-3 rounded-xl mt-2 text-slate-700 text-sm leading-relaxed font-medium border border-slate-100">
-                            <strong>Giải thích:</strong> <MathText text={q.explanation} />
-                        </div>
+                        {/* SVG Support */}
+                        {geometrySvg && (
+                            <div className="mt-4 flex justify-center animation-fade-in">
+                                <div className="border border-slate-200 rounded-2xl p-4 bg-white shadow-inner">
+                                    {/* FIX: Bỏ height="auto" */}
+                                    <svg 
+                                        width="100%" 
+                                        viewBox="0 0 300 200" 
+                                        xmlns="http://www.w3.org/2000/svg" 
+                                        className="max-w-[280px] h-auto mx-auto" 
+                                        style={{ minHeight: '120px' }} 
+                                    >
+                                        {renderSafeSvgContent(geometrySvg)}
+                                    </svg>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
+
+                {/* Render Dynamic Component */}
+                <div className="flex-1">
+                    {renderQuizBody()}
+                </div>
             </div>
 
-            {/* --- BOTTOM BAR FIXED --- */}
-            <div className="flex-none p-4 pb-10 bg-white border-t border-slate-100 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)]">
-                <ClayButton onClick={handleNextQuestion} disabled={!isSubmitted} colorClass={isSubmitted ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-400"} className="w-full h-14 font-black text-xl flex items-center justify-center gap-2">
-                    {(currentQIndex < quizData.length - 1) ? 'Câu Tiếp Theo' : 'Hoàn Thành'} <ArrowRight/>
-                </ClayButton>
-            </div>
+            {/* --- HINT MESSAGE (Khi sai lần đầu và không phải True/False) --- */}
+            {isSubmitted && !isCorrect && attemptCount === 1 && !isTrueFalseType && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animation-fade-in">
+                    <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-shake border-4 border-orange-200">
+                        <div className="p-6 text-center bg-orange-100">
+                            <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-3 shadow-sm border-4 border-white bg-orange-500 text-white">
+                                <Frown size={48} />
+                            </div>
+                            <h2 className="text-2xl font-black uppercase text-orange-700">
+                                Chưa đúng rồi!
+                            </h2>
+                            <p className="font-bold text-slate-600 text-sm mt-1">
+                                Thử tính lại xem!
+                            </p>
+                        </div>
+                        <div className="p-6 bg-white">
+                            <ClayButton 
+                                onClick={() => {
+                                    // Reset để cho phép thử lại
+                                    if (resetCurrentQuestion) {
+                                        resetCurrentQuestion();
+                                    }
+                                }}
+                                colorClass="bg-orange-500 text-white" 
+                                className="w-full h-14 font-black text-xl flex items-center justify-center gap-2 !rounded-xl shadow-lg"
+                            >
+                                Thử Lại
+                            </ClayButton>
+                            <ClayButton 
+                                onClick={handleNextQuestion} 
+                                colorClass="bg-slate-200 text-slate-700" 
+                                className="w-full h-12 font-bold text-sm flex items-center justify-center gap-2 !rounded-xl mt-3"
+                            >
+                                Bỏ Qua
+                            </ClayButton>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- RESULT MODAL (POPUP) - Chỉ hiện khi attemptCount >= 2 hoặc là True/False --- */}
+            {isSubmitted && (attemptCount >= 2 || isTrueFalseType || isCorrect) && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animation-fade-in">
+                    <div className={`w-full max-w-sm bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-shake border-4 ${isCorrect ? 'border-green-200' : 'border-red-200'}`}>
+                        {/* Modal Header */}
+                        <div className={`p-6 text-center ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`}>
+                            <div className={`w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-3 shadow-sm border-4 border-white ${isCorrect ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                                {isCorrect ? <Smile size={48} /> : <Frown size={48} />}
+                            </div>
+                            <h2 className={`text-2xl font-black uppercase ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                                {isCorrect ? "Hoan hô!" : "Tiếc quá!"}
+                            </h2>
+                            <p className="font-bold text-slate-600 text-sm mt-1">
+                                {isCorrect 
+                                    ? (attemptCount === 2 ? "Đúng rồi! (Đã trừ 50% điểm thưởng)" : "Bé giỏi quá đi thôi!")
+                                    : "Không sao, thử lại lần sau nhé."
+                                }
+                            </p>
+                        </div>
+
+                        {/* Modal Body: Explanation */}
+                        <div className="p-6 bg-white">
+                            {!isCorrect && (
+                                <div className="mb-4 text-center">
+                                    <div className="text-xs font-bold text-slate-400 uppercase mb-1">Đáp án đúng là</div>
+                                    <div className="text-xl font-black text-green-600 bg-green-50 py-2 rounded-xl border border-green-100">
+                                        {q.type === 'sorting' 
+                                            ? (Array.isArray(q.correctOrder) ? q.correctOrder.join(' → ') : q.correctOrder)
+                                            : q.type === 'matching' 
+                                                ? 'Xem giải thích bên dưới'
+                                                : (q.correctOption || q.correctVal)
+                                        }
+                                    </div>
+                                </div>
+                            )}
+                            
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-600 text-sm leading-relaxed font-medium max-h-40 overflow-y-auto">
+                                <span className="font-bold text-indigo-500 block mb-1">💡 Giải thích:</span>
+                                <MathText text={q.explanation} />
+                            </div>
+
+                            {/* Action Button */}
+                            <div className="mt-6">
+                                <ClayButton 
+                                    onClick={handleNextQuestion} 
+                                    colorClass={isCorrect ? "bg-green-500 text-white" : "bg-indigo-500 text-white"} 
+                                    className="w-full h-14 font-black text-xl flex items-center justify-center gap-2 !rounded-xl shadow-lg"
+                                >
+                                    {isLastQuestion ? 'Xem Kết Quả' : 'Câu Tiếp Theo'} <ArrowRight />
+                                </ClayButton>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
